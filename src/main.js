@@ -173,21 +173,29 @@ function spawnPlayer() {
 }
 
 function setupGameInput() {
-    // Mouse buttons: left = break, right = place
+    // Track left mouse hold state
+    let leftMouseHeld = false;
+
+    // Mouse buttons: left = mine (hold), right = place/interact
     document.addEventListener('mousedown', (e) => {
         if (!player.mouseLocked) return;
         if (ui.craftingOpen) return;
 
         if (e.button === 0) {
-            // Left click — break block
-            const broke = player.breakBlock(world, inventory);
-            if (!broke) player.swingArm(); // Still swing arm on miss
+            leftMouseHeld = true;
+            if (player.creative) {
+                // Creative — instant break
+                const broke = player.breakBlock(world, inventory);
+                if (!broke) player.swingArm();
+            } else {
+                // Survival — start mining (hold to break)
+                player.startMining(world, inventory);
+            }
         } else if (e.button === 2) {
             // Right click — place block or interact
             const hit = player.raycast();
             if (hit) {
                 const blockType = hit.block;
-                // Check for interactive blocks
                 if (blockType === BlockType.CRAFTING_TABLE) {
                     exitPointerLock();
                     ui.openCrafting('table', inventory);
@@ -199,10 +207,19 @@ function setupGameInput() {
                     return;
                 }
             }
-            // Otherwise place block
             player.placeBlock(world, inventory);
         }
     });
+
+    document.addEventListener('mouseup', (e) => {
+        if (e.button === 0) {
+            leftMouseHeld = false;
+            player.cancelMining();
+        }
+    });
+
+    // Continuous mining: re-check each frame if holding left mouse
+    window._leftMouseHeld = () => leftMouseHeld;
 
     // Prevent context menu
     document.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -292,6 +309,13 @@ function animate() {
 
     // Update systems
     player.update(dt, inventory);
+
+    // Survival mining: continuous hold-to-break
+    if (!player.creative && window._leftMouseHeld && window._leftMouseHeld()) {
+        player.startMining(world, inventory);
+    }
+    player.updateMining(dt, world, inventory);
+
     world.update(player.position);
     dayNight.update(dt, player.position);
     const mobResult = mobs.update(dt, player.position, dayNight.isNight());

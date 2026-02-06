@@ -45,6 +45,10 @@ export class Player {
         this.rightArm = this.createRightArm();
         this.armSwing = 0;
         this.isSwinging = false;
+        this.mineSwingAngle = 0;
+        this.isMining = false;
+        this.mineTarget = null;
+        this.mineProgress = 0;
 
         // Input state
         this.keys = {};
@@ -88,21 +92,21 @@ export class Player {
     }
 
     createRightArm() {
-        // Simple arm/hand that appears in bottom-right of screen
+        // Slim MC-style arm — clean, long, minimal
         const armGroup = new THREE.Group();
 
-        // Arm (skin-colored box)
-        const armGeo = new THREE.BoxGeometry(0.25, 0.7, 0.25);
+        // Arm (skin-colored, slim and long)
+        const armGeo = new THREE.BoxGeometry(0.12, 0.85, 0.12);
         const armMat = new THREE.MeshLambertMaterial({ color: 0xd4a574 }); // Skin tone
         const arm = new THREE.Mesh(armGeo, armMat);
-        arm.position.set(0, -0.15, 0);
+        arm.position.set(0, -0.2, 0);
         armGroup.add(arm);
 
-        // Sleeve (shirt colored)
-        const sleeveGeo = new THREE.BoxGeometry(0.27, 0.2, 0.27);
-        const sleeveMat = new THREE.MeshLambertMaterial({ color: 0x4a7a4a }); // Green shirt
+        // Small sleeve cuff
+        const sleeveGeo = new THREE.BoxGeometry(0.14, 0.12, 0.14);
+        const sleeveMat = new THREE.MeshLambertMaterial({ color: 0x4a7a4a });
         const sleeve = new THREE.Mesh(sleeveGeo, sleeveMat);
-        sleeve.position.set(0, 0.25, 0);
+        sleeve.position.set(0, 0.35, 0);
         armGroup.add(sleeve);
 
         return armGroup;
@@ -111,8 +115,9 @@ export class Player {
     setupControls() {
         document.addEventListener('keydown', (e) => {
             this.keys[e.code] = true;
-            if (e.code === 'ControlLeft' || e.code === 'ControlRight') {
-                this.isSprinting = true;
+            // Sprint with Shift
+            if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
+                if (!this.flying) this.isSprinting = true;
             }
             // Creative mode: double-space to toggle fly
             if (e.code === 'Space' && this.creative) {
@@ -126,7 +131,7 @@ export class Player {
 
         document.addEventListener('keyup', (e) => {
             this.keys[e.code] = false;
-            if (e.code === 'ControlLeft' || e.code === 'ControlRight') {
+            if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
                 this.isSprinting = false;
             }
         });
@@ -171,7 +176,7 @@ export class Player {
             this.velocity.x = moveDir.x * speed * 2;
             this.velocity.z = moveDir.z * speed * 2;
             if (this.keys['Space']) this.velocity.y = speed * 2;
-            else if (this.keys['ShiftLeft']) this.velocity.y = -speed * 2;
+            else if (this.keys['ControlLeft']) this.velocity.y = -speed * 2;
             else this.velocity.y *= 0.8; // Slow down vertically
         } else {
             this.velocity.x = moveDir.x * speed;
@@ -330,18 +335,28 @@ export class Player {
 
     updateArmSwing(dt) {
         if (this.isSwinging) {
-            this.armSwing += dt * 8;
+            this.armSwing += dt * 10;
             if (this.armSwing > Math.PI) {
                 this.armSwing = 0;
                 this.isSwinging = false;
             }
         }
 
-        // Update right arm position relative to camera
+        // Mining swing animation (continuous while holding)
+        if (this.isMining) {
+            this.mineSwingAngle += dt * 6;
+        } else {
+            this.mineSwingAngle *= 0.85; // Smoothly return
+        }
+
+        // Update right arm — slim, lower, to the right
         if (this.rightArm.parent) {
-            const swing = Math.sin(this.armSwing) * 0.3;
-            this.rightArm.position.set(0.45, -0.4 - swing * 0.1, -0.5 + swing * 0.2);
-            this.rightArm.rotation.x = -swing;
+            const swing = Math.sin(this.armSwing) * 0.4;
+            const mineSwing = Math.sin(this.mineSwingAngle) * 0.35;
+            const totalSwing = swing + mineSwing;
+            this.rightArm.position.set(0.38, -0.5 - totalSwing * 0.08, -0.45 + totalSwing * 0.15);
+            this.rightArm.rotation.x = -totalSwing;
+            this.rightArm.rotation.z = -0.1; // Slight tilt
         }
     }
 
@@ -401,6 +416,76 @@ export class Player {
         return null;
     }
 
+    // Start or continue mining a block (called each frame while mouse held)
+    startMining(world, inventory) {
+        const hit = this.raycast();
+        if (!hit) {
+            this.cancelMining();
+            return false;
+        }
+
+        const { x, y, z } = hit.blockPos;
+        const block = world.getBlock(x, y, z);
+        if (block === BlockType.AIR || block === BlockType.WATER || block === BlockType.BEDROCK) {
+            this.cancelMining();
+            return false;
+        }
+
+        // Check if target changed
+        if (!this.mineTarget || this.mineTarget.x !== x || this.mineTarget.y !== y || this.mineTarget.z !== z) {
+            // New target — reset progress
+            this.mineTarget = { x, y, z };
+            this.mineProgress = 0;
+        }
+
+        this.isMining = true;
+        return false; // Not broken yet
+    }
+
+    // Update mining progress each frame (called from update)
+    updateMining(dt, world, inventory) {
+        if (!this.isMining || !this.mineTarget) return;
+
+        const { x, y, z } = this.mineTarget;
+        const block = world.getBlock(x, y, z);
+        if (block === BlockType.AIR || block === BlockType.BEDROCK) {
+            this.cancelMining();
+            return;
+        }
+
+        const data = BlockData[block];
+        const hardness = data ? data.hardness : 1.0;
+        // Break time scales with hardness (minimum 0.2s for instant-feel blocks)
+        const breakTime = Math.max(0.2, hardness * 1.5);
+
+        this.mineProgress += dt;
+
+        if (this.mineProgress >= breakTime) {
+            // Block broken!
+            world.setBlock(x, y, z, BlockType.AIR);
+            this.swingArm();
+
+            // Drop item
+            let dropType = block;
+            if (block === BlockType.GRASS) dropType = BlockType.DIRT;
+            if (block === BlockType.STONE) dropType = BlockType.COBBLESTONE;
+            if (block === BlockType.LEAVES) {
+                if (Math.random() < 0.05) dropType = BlockType.WOOD;
+                else { this.cancelMining(); return; }
+            }
+
+            inventory.addItem(dropType, 1);
+            this.cancelMining();
+        }
+    }
+
+    cancelMining() {
+        this.isMining = false;
+        this.mineTarget = null;
+        this.mineProgress = 0;
+    }
+
+    // Legacy instant break for creative
     breakBlock(world, inventory) {
         const hit = this.raycast();
         if (!hit) return false;
@@ -409,19 +494,15 @@ export class Player {
         const block = world.getBlock(x, y, z);
         if (block === BlockType.AIR || block === BlockType.WATER || block === BlockType.BEDROCK) return false;
 
-        // Remove block
         world.setBlock(x, y, z, BlockType.AIR);
         this.swingArm();
 
-        // Drop the block into inventory
         let dropType = block;
-        // Some blocks drop different items
         if (block === BlockType.GRASS) dropType = BlockType.DIRT;
         if (block === BlockType.STONE) dropType = BlockType.COBBLESTONE;
         if (block === BlockType.LEAVES) {
-            // 1/20 chance to drop sapling (just a wood log for simplicity)
             if (Math.random() < 0.05) dropType = BlockType.WOOD;
-            else return true; // Leaves usually drop nothing
+            else return true;
         }
 
         inventory.addItem(dropType, 1);

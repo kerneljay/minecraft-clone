@@ -127,10 +127,12 @@ export class Chunk {
                 if (height > SEA_LEVEL) {
                     const decNoise = noise.noise2D(wx * 0.5, wz * 0.5);
 
-                    // Trees
+                    // Trees — spread out, not too dense
                     if (biome !== 'desert' && biome !== 'snowy') {
-                        const treeChance = biome === 'forest' ? 0.7 : 0.85;
-                        if (decNoise > treeChance) {
+                        const treeChance = biome === 'forest' ? 0.88 : 0.94;
+                        // Second noise for spacing — prevents clusters
+                        const spacing = noise.noise2D(wx * 0.3 + 500, wz * 0.3 + 500);
+                        if (decNoise > treeChance && spacing > 0.1) {
                             this.generateTree(lx, height + 1, lz);
                         }
                     }
