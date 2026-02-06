@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Minecraft Clone — Survival Mode</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <!-- Title Screen -->
+  <div id="title-screen">
+    <div class="title-content">
+      <h1 class="game-title">MINECRAFT</h1>
+      <p class="subtitle">Browser Edition</p>
+      <button id="play-btn" class="mc-btn">Singleplayer</button>
+      <button id="creative-btn" class="mc-btn">Creative Mode</button>
+      <div class="seed-input">
+        <label for="seed">World Seed:</label>
+        <input type="text" id="seed" placeholder="Random" />
+      </div>
+    </div>
+  </div>
+
+  <!-- HUD -->
+  <div id="hud" style="display:none;">
+    <div id="crosshair">+</div>
+    <div id="hotbar"></div>
+    <div id="health-bar"></div>
+    <div id="hunger-bar"></div>
+    <div id="xp-bar"></div>
+    <div id="debug-info"></div>
+    <div id="block-highlight"></div>
+  </div>
+
+  <!-- Inventory Screen -->
+  <div id="inventory-screen" style="display:none;">
+    <div id="inventory-container">
+      <div id="crafting-grid"></div>
+      <div id="crafting-result"></div>
+      <div id="player-inventory"></div>
+    </div>
+  </div>
+
+  <!-- Pause Menu -->
+  <div id="pause-menu" style="display:none;">
+    <div class="pause-content">
+      <h2>Game Paused</h2>
+      <button id="resume-btn" class="mc-btn">Back to Game</button>
+      <button id="quit-btn" class="mc-btn">Quit to Title</button>
+    </div>
+  </div>
+
+  <!-- Death Screen -->
+  <div id="death-screen" style="display:none;">
+    <div class="death-content">
+      <h1 class="death-title">You Died!</h1>
+      <p id="death-score">Score: 0</p>
+      <button id="respawn-btn" class="mc-btn">Respawn</button>
+      <button id="death-quit-btn" class="mc-btn">Title Screen</button>
+    </div>
+  </div>
+
+  <canvas id="game-canvas"></canvas>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
