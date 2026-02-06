@@ -1,145 +1,211 @@
-// Crafting system — recipes and crafting logic
+// Crafting system — 2x2 (inventory) + 3x3 (crafting table) + furnace smelting
+// FIX: Support both 2x2 and 3x3 grids, many more recipes
 
 import { BlockType } from './blocks.js';
 
-// Recipes: input grid (use 0 for empty) -> output item + count
-// Grid is flattened 3x3 array (9 elements)
+// RECIPES — each has a pattern and output
+// Pattern strings: rows separated by commas, each char maps to an ingredient
+// 2x2 recipes are checked in inventory, 3x3 only at crafting table
+
 export const RECIPES = [
+    // ===== 2x2 RECIPES (also work on 3x3) =====
     {
-        name: 'Planks (from Log)',
-        input: [
-            0, 0, 0,
-            0, BlockType.WOOD, 0,
-            0, 0, 0
-        ],
+        name: 'Planks',
+        pattern: ['A'],
+        key: { A: BlockType.WOOD },
         output: BlockType.PLANKS,
-        count: 4
+        count: 4,
+        size: 1
+    },
+    {
+        name: 'Sticks',
+        pattern: ['A', 'A'],
+        key: { A: BlockType.PLANKS },
+        output: BlockType.STICK,
+        count: 4,
+        size: 2
     },
     {
         name: 'Crafting Table',
-        input: [
-            0, 0, 0,
-            BlockType.PLANKS, BlockType.PLANKS, 0,
-            BlockType.PLANKS, BlockType.PLANKS, 0
-        ],
+        pattern: ['AA', 'AA'],
+        key: { A: BlockType.PLANKS },
         output: BlockType.CRAFTING_TABLE,
-        count: 1
+        count: 1,
+        size: 2
     },
     {
-        name: 'Furnace',
-        input: [
-            BlockType.COBBLESTONE, BlockType.COBBLESTONE, BlockType.COBBLESTONE,
-            BlockType.COBBLESTONE, 0, BlockType.COBBLESTONE,
-            BlockType.COBBLESTONE, BlockType.COBBLESTONE, BlockType.COBBLESTONE
-        ],
-        output: BlockType.FURNACE,
-        count: 1
+        name: 'Torch',
+        pattern: ['A', 'B'],
+        key: { A: BlockType.COAL_ORE, B: BlockType.STICK },
+        output: BlockType.TORCH,
+        count: 4,
+        size: 2
     },
     {
         name: 'Stone Bricks',
-        input: [
-            0, 0, 0,
-            BlockType.STONE, BlockType.STONE, 0,
-            BlockType.STONE, BlockType.STONE, 0
-        ],
+        pattern: ['AA', 'AA'],
+        key: { A: BlockType.STONE },
         output: BlockType.BRICK,
-        count: 4
-    },
-    {
-        name: 'Bookshelf',
-        input: [
-            BlockType.PLANKS, BlockType.PLANKS, BlockType.PLANKS,
-            BlockType.PLANKS, BlockType.PLANKS, BlockType.PLANKS,
-            BlockType.PLANKS, BlockType.PLANKS, BlockType.PLANKS
-        ],
-        output: BlockType.BOOKSHELF,
-        count: 1
-    },
-    {
-        name: 'Glass (from Sand)',
-        input: [
-            0, 0, 0,
-            0, BlockType.SAND, 0,
-            0, 0, 0
-        ],
-        output: BlockType.GLASS,
-        count: 1
+        count: 4,
+        size: 2
     },
     {
         name: 'Snow Block',
-        input: [
-            0, 0, 0,
-            BlockType.ICE, BlockType.ICE, 0,
-            BlockType.ICE, BlockType.ICE, 0
-        ],
-        output: BlockType.SNOW,
-        count: 1
+        pattern: ['AA', 'AA'],
+        key: { A: BlockType.SNOW },
+        output: BlockType.ICE,
+        count: 1,
+        size: 2
+    },
+
+    // ===== 3x3 RECIPES (crafting table only) =====
+    {
+        name: 'Furnace',
+        pattern: ['AAA', 'A A', 'AAA'],
+        key: { A: BlockType.COBBLESTONE },
+        output: BlockType.FURNACE,
+        count: 1,
+        size: 3
+    },
+    {
+        name: 'Wooden Pickaxe',
+        pattern: ['AAA', ' B ', ' B '],
+        key: { A: BlockType.PLANKS, B: BlockType.STICK },
+        output: BlockType.WOODEN_PICKAXE,
+        count: 1,
+        size: 3
+    },
+    {
+        name: 'Stone Pickaxe',
+        pattern: ['AAA', ' B ', ' B '],
+        key: { A: BlockType.COBBLESTONE, B: BlockType.STICK },
+        output: BlockType.STONE_PICKAXE,
+        count: 1,
+        size: 3
+    },
+    {
+        name: 'Wooden Sword',
+        pattern: [' A ', ' A ', ' B '],
+        key: { A: BlockType.PLANKS, B: BlockType.STICK },
+        output: BlockType.WOODEN_SWORD,
+        count: 1,
+        size: 3
+    },
+    {
+        name: 'Stone Sword',
+        pattern: [' A ', ' A ', ' B '],
+        key: { A: BlockType.COBBLESTONE, B: BlockType.STICK },
+        output: BlockType.STONE_SWORD,
+        count: 1,
+        size: 3
+    },
+    {
+        name: 'Wooden Axe',
+        pattern: ['AA ', 'AB ', ' B '],
+        key: { A: BlockType.PLANKS, B: BlockType.STICK },
+        output: BlockType.WOODEN_AXE,
+        count: 1,
+        size: 3
+    },
+    {
+        name: 'Bookshelf',
+        pattern: ['AAA', 'BBB', 'AAA'],
+        key: { A: BlockType.PLANKS, B: BlockType.PLANKS },
+        output: BlockType.BOOKSHELF,
+        count: 1,
+        size: 3
+    },
+    {
+        name: 'Glass (from Sand)',
+        pattern: ['A'],
+        key: { A: BlockType.SAND },
+        output: BlockType.GLASS,
+        count: 1,
+        size: 1
     },
     {
         name: 'TNT',
-        input: [
-            BlockType.SAND, BlockType.GRAVEL, BlockType.SAND,
-            BlockType.GRAVEL, BlockType.SAND, BlockType.GRAVEL,
-            BlockType.SAND, BlockType.GRAVEL, BlockType.SAND
-        ],
+        pattern: ['ABA', 'BAB', 'ABA'],
+        key: { A: BlockType.SAND, B: BlockType.GRAVEL },
         output: BlockType.TNT,
-        count: 1
-    }
+        count: 1,
+        size: 3
+    },
 ];
 
-export function checkRecipe(grid) {
-    // grid is an array of 9 block types (0 = empty)
+// Furnace smelting recipes
+export const SMELTING_RECIPES = [
+    { input: BlockType.IRON_ORE, output: BlockType.IRON_ORE, count: 1, name: 'Smelt Iron' }, // Iron ingot placeholder
+    { input: BlockType.GOLD_ORE, output: BlockType.GOLD_ORE, count: 1, name: 'Smelt Gold' },
+    { input: BlockType.SAND, output: BlockType.GLASS, count: 1, name: 'Smelt Glass' },
+    { input: BlockType.COBBLESTONE, output: BlockType.STONE, count: 1, name: 'Smelt Stone' },
+    { input: BlockType.WOOD, output: BlockType.COAL_ORE, count: 1, name: 'Charcoal' },
+    { input: BlockType.RAW_PORK, output: BlockType.COOKED_PORK, count: 1, name: 'Cook Porkchop' },
+    { input: BlockType.CLAY, output: BlockType.BRICK, count: 1, name: 'Bake Brick' },
+];
+
+// Check recipe against a grid (array of block types)
+// gridSize is 2 for inventory, 3 for crafting table
+export function checkRecipe(grid, gridSize = 3) {
     for (const recipe of RECIPES) {
-        if (matchesRecipe(grid, recipe.input)) {
-            return { type: recipe.output, count: recipe.count };
+        if (recipe.size > gridSize) continue; // Can't craft 3x3 in 2x2
+        if (matchesRecipe(grid, gridSize, recipe)) {
+            return { type: recipe.output, count: recipe.count, name: recipe.name };
         }
     }
     return null;
 }
 
-function matchesRecipe(grid, recipe) {
-    // Try all possible positions (shifted)
-    // Find bounding box of recipe
-    let minR = 3, maxR = -1, minC = 3, maxC = -1;
-    for (let r = 0; r < 3; r++) {
-        for (let c = 0; c < 3; c++) {
-            if (recipe[r * 3 + c] !== 0) {
-                minR = Math.min(minR, r);
-                maxR = Math.max(maxR, r);
-                minC = Math.min(minC, c);
-                maxC = Math.max(maxC, c);
+function matchesRecipe(grid, gridSize, recipe) {
+    const pattern = recipe.pattern;
+    const key = recipe.key;
+
+    // Get pattern dimensions
+    const patH = pattern.length;
+    const patW = Math.max(...pattern.map(r => r.length));
+
+    // Try all valid offsets within the grid
+    for (let dr = 0; dr <= gridSize - patH; dr++) {
+        for (let dc = 0; dc <= gridSize - patW; dc++) {
+            if (checkOffset(grid, gridSize, pattern, key, dr, dc, patH, patW)) {
+                return true;
             }
         }
     }
+    return false;
+}
 
-    let gMinR = 3, gMaxR = -1, gMinC = 3, gMaxC = -1;
-    for (let r = 0; r < 3; r++) {
-        for (let c = 0; c < 3; c++) {
-            if (grid[r * 3 + c] !== 0) {
-                gMinR = Math.min(gMinR, r);
-                gMaxR = Math.max(gMaxR, r);
-                gMinC = Math.min(gMinC, c);
-                gMaxC = Math.max(gMaxC, c);
+function checkOffset(grid, gridSize, pattern, key, dr, dc, patH, patW) {
+    // Verify all grid cells
+    for (let r = 0; r < gridSize; r++) {
+        for (let c = 0; c < gridSize; c++) {
+            const gridVal = grid[r * gridSize + c] || 0;
+            const pr = r - dr;
+            const pc = c - dc;
+
+            if (pr >= 0 && pr < patH && pc >= 0 && pc < pattern[pr].length) {
+                const patChar = pattern[pr][pc];
+                if (patChar === ' ') {
+                    if (gridVal !== 0) return false;
+                } else {
+                    const expected = key[patChar];
+                    if (gridVal !== expected) return false;
+                }
+            } else {
+                // Outside pattern — must be empty
+                if (gridVal !== 0) return false;
             }
         }
     }
-
-    // Dimensions must match
-    if (maxR - minR !== gMaxR - gMinR || maxC - minC !== gMaxC - gMinC) return false;
-
-    // Check alignment
-    const dr = gMinR - minR;
-    const dc = gMinC - minC;
-
-    for (let r = 0; r < 3; r++) {
-        for (let c = 0; c < 3; c++) {
-            const recipeVal = recipe[r * 3 + c];
-            const gr = r + dr;
-            const gc = c + dc;
-            const gridVal = (gr >= 0 && gr < 3 && gc >= 0 && gc < 3) ? grid[gr * 3 + gc] : 0;
-            if (recipeVal !== gridVal) return false;
-        }
-    }
-
     return true;
+}
+
+// Check smelting recipe
+export function checkSmelting(inputType) {
+    for (const r of SMELTING_RECIPES) {
+        if (r.input === inputType) {
+            return { type: r.output, count: r.count, name: r.name };
+        }
+    }
+    return null;
 }

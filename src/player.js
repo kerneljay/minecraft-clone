@@ -1,7 +1,8 @@
-// Player controller — first-person movement, physics, and block interaction
+// Player controller — first-person movement, physics, block interaction, and right hand
+// FIX: Edge-outline block highlight (not wireframe), visible right arm, better physics
 
 import * as THREE from 'three';
-import { BlockType, BlockData, isBlockSolid } from './blocks.js';
+import { BlockType, BlockData, isBlockSolid, isPlaceable, isItem } from './blocks.js';
 import { CHUNK_HEIGHT } from './chunk.js';
 
 export class Player {
@@ -13,27 +14,43 @@ export class Player {
         this.position = new THREE.Vector3(8, 80, 8);
         this.velocity = new THREE.Vector3(0, 0, 0);
         this.onGround = false;
-        this.width = 0.6;  // Player hitbox
-        this.height = 1.8;
+        this.width = 0.6;
+        this.height = 1.62;
+        this.eyeHeight = 1.52;
 
-        // Camera
-        this.yaw = 0;
-        this.pitch = 0;
-
-        // Movement params
-        this.walkSpeed = 4.317;   // Minecraft walk speed
-        this.sprintSpeed = 5.612; // Sprint speed
+        // Movement
+        this.speed = 4.317; // Blocks/second (Minecraft sprint ~5.6)
+        this.sprintSpeed = 5.612;
         this.jumpForce = 8.5;
         this.gravity = -28;
         this.isSprinting = false;
-        this.isFlying = false; // Creative mode
+
+        // Mouse look
+        this.yaw = 0;
+        this.pitch = 0;
+        this.sensitivity = 0.002;
 
         // Block interaction
+        this.reach = 5;
+        this.raycaster = new THREE.Raycaster();
         this.breakProgress = 0;
-        this.breakingBlock = null;
-        this.selectedSlot = 0;
+        this.breakTarget = null;
+        this.isBreaking = false;
+        this.breakTime = 0.5; // Default break time in seconds
 
-        // Survival stats
+        // Block highlight — edge-painted box, NOT wireframe
+        this.highlightBox = this.createBlockHighlight();
+
+        // Right hand/arm
+        this.rightArm = this.createRightArm();
+        this.armSwing = 0;
+        this.isSwinging = false;
+
+        // Input state
+        this.keys = {};
+        this.mouseLocked = false;
+
+        // Health & Hunger
         this.health = 20;
         this.maxHealth = 20;
         this.hunger = 20;
@@ -41,90 +58,103 @@ export class Player {
         this.saturation = 5;
         this.xp = 0;
         this.xpLevel = 0;
-        this.isDead = false;
-
-        // Hunger timer
+        this.xpProgress = 0;
         this.hungerTimer = 0;
-        this.healTimer = 0;
-        this.damageTimer = 0;
+        this.regenTimer = 0;
+        this.fallStartY = null;
 
-        // Fall damage
-        this.fallStartY = this.position.y;
-        this.wasFalling = false;
+        // Game mode
+        this.creative = false;
+        this.flying = false;
 
-        // Input state
-        this.keys = {};
-        this.mouseDX = 0;
-        this.mouseDY = 0;
-        this.leftClick = false;
-        this.rightClick = false;
-        this.leftClickHeld = false;
-
-        this.setupInput();
+        this.setupControls();
     }
 
-    setupInput() {
+    createBlockHighlight() {
+        // Create an edge-only box using EdgesGeometry for clean Minecraft-style outline
+        const boxGeo = new THREE.BoxGeometry(1.005, 1.005, 1.005);
+        const edgesGeo = new THREE.EdgesGeometry(boxGeo);
+        const edgeMat = new THREE.LineBasicMaterial({
+            color: 0x000000,
+            linewidth: 2,
+            transparent: true,
+            opacity: 0.6,
+            depthTest: true,
+        });
+        const highlight = new THREE.LineSegments(edgesGeo, edgeMat);
+        highlight.visible = false;
+        highlight.renderOrder = 999;
+        return highlight;
+    }
+
+    createRightArm() {
+        // Simple arm/hand that appears in bottom-right of screen
+        const armGroup = new THREE.Group();
+
+        // Arm (skin-colored box)
+        const armGeo = new THREE.BoxGeometry(0.25, 0.7, 0.25);
+        const armMat = new THREE.MeshLambertMaterial({ color: 0xd4a574 }); // Skin tone
+        const arm = new THREE.Mesh(armGeo, armMat);
+        arm.position.set(0, -0.15, 0);
+        armGroup.add(arm);
+
+        // Sleeve (shirt colored)
+        const sleeveGeo = new THREE.BoxGeometry(0.27, 0.2, 0.27);
+        const sleeveMat = new THREE.MeshLambertMaterial({ color: 0x4a7a4a }); // Green shirt
+        const sleeve = new THREE.Mesh(sleeveGeo, sleeveMat);
+        sleeve.position.set(0, 0.25, 0);
+        armGroup.add(sleeve);
+
+        return armGroup;
+    }
+
+    setupControls() {
         document.addEventListener('keydown', (e) => {
             this.keys[e.code] = true;
-            if (e.code === 'ShiftLeft') this.isSprinting = true;
-
-            // Hotbar selection with number keys
-            if (e.code >= 'Digit1' && e.code <= 'Digit9') {
-                this.selectedSlot = parseInt(e.code.replace('Digit', '')) - 1;
+            if (e.code === 'ControlLeft' || e.code === 'ControlRight') {
+                this.isSprinting = true;
+            }
+            // Creative mode: double-space to toggle fly
+            if (e.code === 'Space' && this.creative) {
+                if (this._lastSpaceTime && Date.now() - this._lastSpaceTime < 300) {
+                    this.flying = !this.flying;
+                    this.velocity.y = 0;
+                }
+                this._lastSpaceTime = Date.now();
             }
         });
 
         document.addEventListener('keyup', (e) => {
             this.keys[e.code] = false;
-            if (e.code === 'ShiftLeft') this.isSprinting = false;
+            if (e.code === 'ControlLeft' || e.code === 'ControlRight') {
+                this.isSprinting = false;
+            }
         });
 
         document.addEventListener('mousemove', (e) => {
-            if (document.pointerLockElement) {
-                this.mouseDX += e.movementX;
-                this.mouseDY += e.movementY;
-            }
+            if (!this.mouseLocked) return;
+            this.yaw -= e.movementX * this.sensitivity;
+            this.pitch -= e.movementY * this.sensitivity;
+            this.pitch = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, this.pitch));
         });
-
-        document.addEventListener('mousedown', (e) => {
-            if (e.button === 0) { this.leftClick = true; this.leftClickHeld = true; }
-            if (e.button === 2) this.rightClick = true;
-        });
-
-        document.addEventListener('mouseup', (e) => {
-            if (e.button === 0) { this.leftClickHeld = false; this.breakProgress = 0; this.breakingBlock = null; }
-        });
-
-        document.addEventListener('wheel', (e) => {
-            if (e.deltaY > 0) {
-                this.selectedSlot = (this.selectedSlot + 1) % 9;
-            } else {
-                this.selectedSlot = (this.selectedSlot - 1 + 9) % 9;
-            }
-        });
-
-        // Prevent context menu
-        document.addEventListener('contextmenu', (e) => e.preventDefault());
     }
 
     update(dt, inventory) {
-        if (this.isDead) return;
-
-        // Clamp dt to avoid physics issues
+        // Clamp dt to prevent tunneling
         dt = Math.min(dt, 0.05);
 
-        // Mouse look
-        const sensitivity = 0.002;
-        this.yaw -= this.mouseDX * sensitivity;
-        this.pitch -= this.mouseDY * sensitivity;
-        this.pitch = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, this.pitch));
-        this.mouseDX = 0;
-        this.mouseDY = 0;
+        this.updateMovement(dt);
+        this.updatePhysics(dt);
+        this.updateCamera();
+        this.updateBlockHighlight();
+        this.updateHunger(dt);
+        this.updateArmSwing(dt);
+    }
 
-        // Movement
-        const speed = this.isSprinting ? this.sprintSpeed : this.walkSpeed;
+    updateMovement(dt) {
         const forward = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
         const right = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
+
         const moveDir = new THREE.Vector3(0, 0, 0);
 
         if (this.keys['KeyW']) moveDir.add(forward);
@@ -132,105 +162,84 @@ export class Player {
         if (this.keys['KeyA']) moveDir.sub(right);
         if (this.keys['KeyD']) moveDir.add(right);
 
-        if (moveDir.length() > 0) {
-            moveDir.normalize().multiplyScalar(speed);
-        }
+        if (moveDir.lengthSq() > 0) moveDir.normalize();
 
-        // Apply gravity
-        if (!this.isFlying) {
+        const speed = this.isSprinting ? this.sprintSpeed : this.speed;
+
+        if (this.flying) {
+            // Flying mode (creative)
+            this.velocity.x = moveDir.x * speed * 2;
+            this.velocity.z = moveDir.z * speed * 2;
+            if (this.keys['Space']) this.velocity.y = speed * 2;
+            else if (this.keys['ShiftLeft']) this.velocity.y = -speed * 2;
+            else this.velocity.y *= 0.8; // Slow down vertically
+        } else {
+            this.velocity.x = moveDir.x * speed;
+            this.velocity.z = moveDir.z * speed;
+
+            // Jump
+            if (this.keys['Space'] && this.onGround) {
+                this.velocity.y = this.jumpForce;
+                this.onGround = false;
+                this.fallStartY = this.position.y;
+            }
+        }
+    }
+
+    updatePhysics(dt) {
+        if (!this.flying) {
             this.velocity.y += this.gravity * dt;
         }
 
-        // Flying controls
-        if (this.isFlying) {
-            this.velocity.y = 0;
-            if (this.keys['Space']) this.velocity.y = 10;
-            if (this.keys['ShiftLeft']) this.velocity.y = -10;
-        }
-
-        // Jump
-        if (this.keys['Space'] && this.onGround && !this.isFlying) {
-            this.velocity.y = this.jumpForce;
-            this.onGround = false;
-            // Sprinting reduces hunger faster
-            if (this.isSprinting) this.hunger = Math.max(0, this.hunger - 0.1);
-        }
-
-        this.velocity.x = moveDir.x;
-        this.velocity.z = moveDir.z;
-
-        // Collision detection & movement
-        this.moveWithCollision(dt);
-
-        // Fall damage
-        if (this.onGround) {
-            if (this.wasFalling) {
-                const fallDist = this.fallStartY - this.position.y;
-                if (fallDist > 3) {
-                    const damage = Math.floor(fallDist - 3);
-                    this.takeDamage(damage);
-                }
-            }
+        // Track fall start for fall damage
+        if (!this.onGround && !this.flying && this.velocity.y < 0 && this.fallStartY === null) {
             this.fallStartY = this.position.y;
-            this.wasFalling = false;
-        } else {
-            if (this.velocity.y < 0) {
-                if (!this.wasFalling) {
-                    this.fallStartY = this.position.y;
-                    this.wasFalling = true;
-                }
-            }
         }
 
-        // Update camera
-        this.camera.position.copy(this.position);
-        this.camera.position.y += 1.62; // Eye height
+        // Move with collision
+        const newPos = this.position.clone();
 
-        const euler = new THREE.Euler(this.pitch, this.yaw, 0, 'YXZ');
-        this.camera.quaternion.setFromEuler(euler);
-
-        // Survival mechanics
-        this.updateSurvival(dt);
-
-        // Block interaction
-        this.handleBlockInteraction(dt, inventory);
-
-        // Reset click states
-        this.leftClick = false;
-        this.rightClick = false;
-    }
-
-    moveWithCollision(dt) {
-        const hw = this.width / 2;
-        const pos = this.position;
-
-        // Move X
-        pos.x += this.velocity.x * dt;
-        if (this.checkCollision(pos)) {
-            pos.x -= this.velocity.x * dt;
+        // X axis
+        newPos.x += this.velocity.x * dt;
+        if (this.checkCollision(newPos)) {
+            newPos.x = this.position.x;
             this.velocity.x = 0;
         }
 
-        // Move Y
-        pos.y += this.velocity.y * dt;
-        if (this.checkCollision(pos)) {
-            if (this.velocity.y < 0) this.onGround = true;
-            pos.y -= this.velocity.y * dt;
+        // Y axis
+        newPos.y += this.velocity.y * dt;
+        if (this.checkCollision(newPos)) {
+            if (this.velocity.y < 0) {
+                // Landing
+                if (this.fallStartY !== null && !this.creative) {
+                    const fallDist = this.fallStartY - newPos.y;
+                    if (fallDist > 3) {
+                        const damage = Math.floor(fallDist - 3);
+                        this.takeDamage(damage);
+                    }
+                }
+                this.onGround = true;
+                this.fallStartY = null;
+            }
+            newPos.y = this.position.y;
             this.velocity.y = 0;
         } else {
-            this.onGround = false;
+            if (!this.flying) this.onGround = false;
         }
 
-        // Move Z
-        pos.z += this.velocity.z * dt;
-        if (this.checkCollision(pos)) {
-            pos.z -= this.velocity.z * dt;
+        // Z axis
+        newPos.z += this.velocity.z * dt;
+        if (this.checkCollision(newPos)) {
+            newPos.z = this.position.z;
             this.velocity.z = 0;
         }
 
-        // Keep above void
-        if (pos.y < -10) {
-            this.takeDamage(20);
+        this.position.copy(newPos);
+
+        // Keep above bedrock
+        if (this.position.y < 1) {
+            this.position.y = 80;
+            this.velocity.y = 0;
         }
     }
 
@@ -245,171 +254,206 @@ export class Player {
             [pos.x + hw, pos.y + this.height, pos.z - hw],
             [pos.x - hw, pos.y + this.height, pos.z + hw],
             [pos.x + hw, pos.y + this.height, pos.z + hw],
-            // Middle height check
-            [pos.x - hw, pos.y + 0.9, pos.z - hw],
-            [pos.x + hw, pos.y + 0.9, pos.z - hw],
-            [pos.x - hw, pos.y + 0.9, pos.z + hw],
-            [pos.x + hw, pos.y + 0.9, pos.z + hw],
+            // Mid-height
+            [pos.x - hw, pos.y + this.height * 0.5, pos.z - hw],
+            [pos.x + hw, pos.y + this.height * 0.5, pos.z + hw],
         ];
 
         for (const [cx, cy, cz] of corners) {
             const bx = Math.floor(cx);
             const by = Math.floor(cy);
             const bz = Math.floor(cz);
-            const block = this.world.getBlock(bx, by, bz);
-            if (isBlockSolid(block)) return true;
+            if (isBlockSolid(this.world.getBlock(bx, by, bz))) {
+                return true;
+            }
         }
         return false;
     }
 
-    handleBlockInteraction(dt, inventory) {
-        // Get direction camera is looking
-        const dir = new THREE.Vector3(0, 0, -1);
-        dir.applyQuaternion(this.camera.quaternion);
+    updateCamera() {
+        this.camera.position.set(
+            this.position.x,
+            this.position.y + this.eyeHeight,
+            this.position.z
+        );
 
-        const hit = this.world.raycast(this.camera.position, dir, 5);
+        const euler = new THREE.Euler(this.pitch, this.yaw, 0, 'YXZ');
+        this.camera.quaternion.setFromEuler(euler);
+    }
 
+    updateBlockHighlight() {
+        const hit = this.raycast();
         if (hit) {
-            // Breaking blocks (left click held)
-            if (this.leftClickHeld) {
-                const pos = hit.position;
-                const key = `${pos.x},${pos.y},${pos.z}`;
-
-                if (this.breakingBlock !== key) {
-                    this.breakingBlock = key;
-                    this.breakProgress = 0;
-                }
-
-                const blockData = BlockData[hit.block];
-                const breakTime = blockData.hardness < 0 ? Infinity : (blockData.hardness * 1.5);
-
-                this.breakProgress += dt;
-
-                if (this.breakProgress >= breakTime && breakTime !== Infinity) {
-                    // Break the block!
-                    const dropType = blockData.drop;
-                    this.world.setBlock(pos.x, pos.y, pos.z, BlockType.AIR);
-
-                    // Add to inventory
-                    if (dropType !== BlockType.AIR) {
-                        inventory.addItem(dropType, 1);
-                    }
-
-                    this.breakProgress = 0;
-                    this.breakingBlock = null;
-
-                    // Hunger depletion from mining
-                    this.hunger = Math.max(0, this.hunger - 0.025);
-                }
-            }
-
-            // Placing blocks (right click)
-            if (this.rightClick && hit.normal) {
-                const px = hit.position.x + hit.normal.x;
-                const py = hit.position.y + hit.normal.y;
-                const pz = hit.position.z + hit.normal.z;
-
-                // Check player isn't placing inside themselves
-                const playerMinX = this.position.x - this.width / 2;
-                const playerMaxX = this.position.x + this.width / 2;
-                const playerMinY = this.position.y;
-                const playerMaxY = this.position.y + this.height;
-                const playerMinZ = this.position.z - this.width / 2;
-                const playerMaxZ = this.position.z + this.width / 2;
-
-                const blockInPlayer = (
-                    px + 1 > playerMinX && px < playerMaxX &&
-                    py + 1 > playerMinY && py < playerMaxY &&
-                    pz + 1 > playerMinZ && pz < playerMaxZ
-                );
-
-                if (!blockInPlayer) {
-                    const heldItem = inventory.getHeldItem();
-                    if (heldItem && heldItem.count > 0 && isBlockSolid(heldItem.type)) {
-                        this.world.setBlock(px, py, pz, heldItem.type);
-                        inventory.removeFromSlot(this.selectedSlot, 1);
-                    }
-                }
-            }
+            this.highlightBox.visible = true;
+            this.highlightBox.position.set(
+                hit.blockPos.x + 0.5,
+                hit.blockPos.y + 0.5,
+                hit.blockPos.z + 0.5
+            );
         } else {
-            this.breakProgress = 0;
-            this.breakingBlock = null;
+            this.highlightBox.visible = false;
         }
     }
 
-    updateSurvival(dt) {
-        // Hunger depletion over time
+    updateHunger(dt) {
+        if (this.creative) return;
+
+        // Drain hunger over time or with sprint
         this.hungerTimer += dt;
-        if (this.hungerTimer >= 4) { // ~80 seconds Minecraft tick for hunger
+        const drainRate = this.isSprinting ? 0.5 : 1.2;
+        if (this.hungerTimer > drainRate) {
             this.hungerTimer = 0;
-            if (this.isSprinting || this.velocity.length() > 0.1) {
+            if (this.hunger > 0) {
                 this.hunger = Math.max(0, this.hunger - 0.5);
-            } else {
-                this.hunger = Math.max(0, this.hunger - 0.1);
             }
         }
 
-        // Health regeneration (when hunger >= 18)
-        if (this.hunger >= 18 && this.health < this.maxHealth) {
-            this.healTimer += dt;
-            if (this.healTimer >= 0.5) {
-                this.healTimer = 0;
+        // Regen health when hunger > 17
+        if (this.hunger > 17 && this.health < this.maxHealth) {
+            this.regenTimer += dt;
+            if (this.regenTimer > 2) {
+                this.regenTimer = 0;
                 this.health = Math.min(this.maxHealth, this.health + 1);
                 this.hunger = Math.max(0, this.hunger - 0.3);
             }
         }
 
-        // Starvation damage (when hunger === 0)
-        if (this.hunger === 0) {
-            this.damageTimer += dt;
-            if (this.damageTimer >= 4) {
-                this.damageTimer = 0;
-                this.takeDamage(1);
+        // Starve damage when hunger = 0
+        if (this.hunger <= 0) {
+            this.regenTimer += dt;
+            if (this.regenTimer > 4) {
+                this.regenTimer = 0;
+                if (this.health > 1) this.takeDamage(1);
+            }
+        }
+    }
+
+    updateArmSwing(dt) {
+        if (this.isSwinging) {
+            this.armSwing += dt * 8;
+            if (this.armSwing > Math.PI) {
+                this.armSwing = 0;
+                this.isSwinging = false;
             }
         }
 
-        // Water damage (head submerged — simplified)
-        const headY = this.position.y + 1.62;
-        const headBlock = this.world.getBlock(
-            Math.floor(this.position.x),
-            Math.floor(headY),
-            Math.floor(this.position.z)
-        );
-        if (headBlock === BlockType.WATER) {
-            // Simplified drowning
-            this.damageTimer += dt;
-            if (this.damageTimer >= 2) {
-                this.damageTimer = 0;
-                this.takeDamage(1);
-            }
+        // Update right arm position relative to camera
+        if (this.rightArm.parent) {
+            const swing = Math.sin(this.armSwing) * 0.3;
+            this.rightArm.position.set(0.45, -0.4 - swing * 0.1, -0.5 + swing * 0.2);
+            this.rightArm.rotation.x = -swing;
         }
+    }
+
+    swingArm() {
+        this.isSwinging = true;
+        this.armSwing = 0;
     }
 
     takeDamage(amount) {
-        if (this.isDead) return;
+        if (this.creative) return;
         this.health = Math.max(0, this.health - amount);
-        if (this.health <= 0) {
-            this.isDead = true;
-        }
+        // Red flash effect handled by UI
     }
 
-    respawn() {
-        this.health = this.maxHealth;
-        this.hunger = this.maxHunger;
-        this.isDead = false;
-        this.velocity.set(0, 0, 0);
-        this.position.set(8, this.world.getSpawnHeight(8, 8) + 1, 8);
-        this.fallStartY = this.position.y;
+    heal(amount) {
+        this.health = Math.min(this.maxHealth, this.health + amount);
     }
 
-    getForwardDir() {
+    eat(hungerRestore, satRestore = 0) {
+        this.hunger = Math.min(this.maxHunger, this.hunger + hungerRestore);
+        this.saturation = Math.min(this.hunger, this.saturation + satRestore);
+    }
+
+    raycast() {
         const dir = new THREE.Vector3(0, 0, -1);
         dir.applyQuaternion(this.camera.quaternion);
-        return dir;
+
+        const origin = this.camera.position.clone();
+        const step = 0.05;
+        let prevX = -1, prevY = -1, prevZ = -1;
+
+        for (let t = 0; t < this.reach; t += step) {
+            const px = origin.x + dir.x * t;
+            const py = origin.y + dir.y * t;
+            const pz = origin.z + dir.z * t;
+
+            const bx = Math.floor(px);
+            const by = Math.floor(py);
+            const bz = Math.floor(pz);
+
+            if (bx !== prevX || by !== prevY || bz !== prevZ) {
+                const block = this.world.getBlock(bx, by, bz);
+                if (block !== BlockType.AIR && block !== BlockType.WATER) {
+                    return {
+                        blockPos: { x: bx, y: by, z: bz },
+                        prevPos: { x: prevX, y: prevY, z: prevZ },
+                        block: block,
+                        distance: t
+                    };
+                }
+                prevX = bx;
+                prevY = by;
+                prevZ = bz;
+            }
+        }
+
+        return null;
     }
 
-    getLookingAt() {
-        const dir = this.getForwardDir();
-        return this.world.raycast(this.camera.position, dir, 5);
+    breakBlock(world, inventory) {
+        const hit = this.raycast();
+        if (!hit) return false;
+
+        const { x, y, z } = hit.blockPos;
+        const block = world.getBlock(x, y, z);
+        if (block === BlockType.AIR || block === BlockType.WATER || block === BlockType.BEDROCK) return false;
+
+        // Remove block
+        world.setBlock(x, y, z, BlockType.AIR);
+        this.swingArm();
+
+        // Drop the block into inventory
+        let dropType = block;
+        // Some blocks drop different items
+        if (block === BlockType.GRASS) dropType = BlockType.DIRT;
+        if (block === BlockType.STONE) dropType = BlockType.COBBLESTONE;
+        if (block === BlockType.LEAVES) {
+            // 1/20 chance to drop sapling (just a wood log for simplicity)
+            if (Math.random() < 0.05) dropType = BlockType.WOOD;
+            else return true; // Leaves usually drop nothing
+        }
+
+        inventory.addItem(dropType, 1);
+        return true;
+    }
+
+    placeBlock(world, inventory) {
+        const hit = this.raycast();
+        if (!hit || hit.prevPos.x < 0) return false;
+
+        const held = inventory.getHeldItem();
+        if (!held) return false;
+
+        // Only place placeable blocks
+        if (isItem(held.type)) return false;
+
+        const { x, y, z } = hit.prevPos;
+
+        // Don't place inside player
+        const hw = this.width / 2;
+        if (x >= Math.floor(this.position.x - hw) && x <= Math.floor(this.position.x + hw) &&
+            z >= Math.floor(this.position.z - hw) && z <= Math.floor(this.position.z + hw) &&
+            y >= Math.floor(this.position.y) && y <= Math.floor(this.position.y + this.height)) {
+            return false;
+        }
+
+        world.setBlock(x, y, z, held.type);
+        this.swingArm();
+
+        if (!this.creative) {
+            inventory.removeFromSlot(inventory.selectedSlot, 1);
+        }
+        return true;
     }
 }

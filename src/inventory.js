@@ -1,23 +1,29 @@
 // Inventory system — hotbar, slots, item stacks
+// FIX: Survival starts EMPTY, creative gets all blocks
 
-import { BlockType, BlockData } from './blocks.js';
-import { getBlockIconCanvas } from './textures.js';
+import { BlockType, BlockData, isPlaceable, isItem } from './blocks.js';
 
 export class Inventory {
-    constructor() {
+    constructor(creative = false) {
         // 36 slots: 0-8 = hotbar, 9-35 = main inventory
         this.slots = new Array(36).fill(null);
+        this.selectedSlot = 0;
 
-        // Start with some survival items
-        this.slots[0] = { type: BlockType.PLANKS, count: 32 };
-        this.slots[1] = { type: BlockType.COBBLESTONE, count: 32 };
-        this.slots[2] = { type: BlockType.DIRT, count: 64 };
-        this.slots[3] = { type: BlockType.TORCH, count: 16 };
-        this.slots[4] = { type: BlockType.CRAFTING_TABLE, count: 1 };
-        this.slots[5] = { type: BlockType.FURNACE, count: 1 };
-        this.slots[6] = { type: BlockType.GLASS, count: 16 };
-        this.slots[7] = { type: BlockType.BRICK, count: 32 };
-        this.slots[8] = { type: BlockType.SAND, count: 32 };
+        if (creative) {
+            this.fillCreative();
+        }
+        // Survival: starts completely empty — you must gather everything!
+    }
+
+    fillCreative() {
+        let slot = 0;
+        for (const typeStr in BlockType) {
+            const type = BlockType[typeStr];
+            if (type !== BlockType.AIR && type !== BlockType.WATER && type !== BlockType.BEDROCK && slot < 36) {
+                inventory_set(this.slots, slot, type, 64);
+                slot++;
+            }
+        }
     }
 
     addItem(type, count = 1) {
@@ -50,7 +56,7 @@ export class Inventory {
     }
 
     getHeldItem() {
-        return this.slots[this.selectedSlot || 0];
+        return this.slots[this.selectedSlot];
     }
 
     getSlot(index) {
@@ -62,4 +68,31 @@ export class Inventory {
         this.slots[a] = this.slots[b];
         this.slots[b] = temp;
     }
+
+    // Check if player has at least N of a type
+    hasItem(type, count = 1) {
+        let total = 0;
+        for (const slot of this.slots) {
+            if (slot && slot.type === type) total += slot.count;
+        }
+        return total >= count;
+    }
+
+    // Remove items from anywhere in inventory (for crafting)
+    removeItem(type, count = 1) {
+        for (let i = 0; i < this.slots.length; i++) {
+            if (this.slots[i] && this.slots[i].type === type) {
+                const take = Math.min(count, this.slots[i].count);
+                this.slots[i].count -= take;
+                count -= take;
+                if (this.slots[i].count <= 0) this.slots[i] = null;
+                if (count <= 0) return true;
+            }
+        }
+        return count <= 0;
+    }
+}
+
+function inventory_set(slots, index, type, count) {
+    slots[index] = { type, count };
 }

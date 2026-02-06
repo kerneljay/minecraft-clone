@@ -13,7 +13,6 @@ export class World {
         this.chunks = new Map();
         this.noise = new SimplexNoise(seed);
         this.renderDistance = 6;
-        this.chunksToGenerate = [];
         this.seed = seed;
     }
 
@@ -30,7 +29,7 @@ export class World {
         const cx = Math.floor(wx / CHUNK_SIZE);
         const cz = Math.floor(wz / CHUNK_SIZE);
         const chunk = this.getChunk(cx, cz);
-        if (!chunk || !chunk.generated) return BlockType.STONE; // Assume solid for unloaded
+        if (!chunk || !chunk.generated) return BlockType.STONE;
         const lx = ((wx % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
         const lz = ((wz % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
         return chunk.blocks[chunk.getIndex(lx, wy, lz)];
@@ -47,16 +46,20 @@ export class World {
         chunk.blocks[chunk.getIndex(lx, wy, lz)] = type;
         chunk.dirty = true;
 
-        // Mark neighboring chunks dirty if we're at the edge
+        // Mark neighboring chunks dirty if at edge
         if (lx === 0) { const nc = this.getChunk(cx - 1, cz); if (nc) nc.dirty = true; }
         if (lx === CHUNK_SIZE - 1) { const nc = this.getChunk(cx + 1, cz); if (nc) nc.dirty = true; }
         if (lz === 0) { const nc = this.getChunk(cx, cz - 1); if (nc) nc.dirty = true; }
         if (lz === CHUNK_SIZE - 1) { const nc = this.getChunk(cx, cz + 1); if (nc) nc.dirty = true; }
     }
 
-    update(playerX, playerZ) {
-        const pcx = Math.floor(playerX / CHUNK_SIZE);
-        const pcz = Math.floor(playerZ / CHUNK_SIZE);
+    // Accept either (Vector3) or (Vector3, forceAll)
+    update(playerPos, forceAll = false) {
+        const px = typeof playerPos === 'object' ? playerPos.x : playerPos;
+        const pz = typeof playerPos === 'object' ? playerPos.z : arguments[1] || 0;
+
+        const pcx = Math.floor(px / CHUNK_SIZE);
+        const pcz = Math.floor(pz / CHUNK_SIZE);
         const rd = this.renderDistance;
 
         // Generate new chunks
@@ -75,10 +78,11 @@ export class World {
             }
         }
 
-        // Build/rebuild dirty meshes (limit per frame)
+        // Build/rebuild dirty meshes (limit per frame unless forced)
         let built = 0;
+        const maxBuild = forceAll ? 200 : 3;
         for (const [key, chunk] of this.chunks) {
-            if (chunk.dirty && chunk.generated && built < 3) {
+            if (chunk.dirty && chunk.generated && built < maxBuild) {
                 chunk.buildMesh(this.material, this.waterMaterial);
                 if (chunk.mesh) this.scene.add(chunk.mesh);
                 if (chunk.waterMesh) this.scene.add(chunk.waterMesh);

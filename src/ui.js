@@ -1,8 +1,8 @@
-// UI system — HUD rendering (health, hunger, hotbar, crosshair, debug info)
+// UI system — HUD rendering (health, hunger, hotbar, crosshair, debug info, crafting UI)
+// FIX: MC-style UI polish, proper crafting grid, block icons in hotbar
 
-import { BlockType, BlockData } from './blocks.js';
-import { getBlockIconCanvas } from './textures.js';
-import { checkRecipe } from './crafting.js';
+import { BlockType, BlockData, isItem } from './blocks.js';
+import { checkRecipe, checkSmelting } from './crafting.js';
 
 export class UI {
     constructor() {
@@ -11,239 +11,460 @@ export class UI {
         this.hungerBar = document.getElementById('hunger-bar');
         this.xpBar = document.getElementById('xp-bar');
         this.debugInfo = document.getElementById('debug-info');
-        this.inventoryScreen = document.getElementById('inventory-screen');
-        this.craftingGrid = document.getElementById('crafting-grid');
-        this.craftingResult = document.getElementById('crafting-result');
-        this.playerInventory = document.getElementById('player-inventory');
-        this.deathScreen = document.getElementById('death-screen');
-        this.pauseMenu = document.getElementById('pause-menu');
+        this.crosshair = document.getElementById('crosshair');
 
+        // Crafting overlay
+        this.craftingOpen = false;
         this.inventoryOpen = false;
-        this.craftingSlots = new Array(9).fill(0);
-        this.selectedInvSlot = -1;
+        this.craftingGrid = new Array(9).fill(0); // 3x3 for crafting table
+        this.invCraftGrid = new Array(4).fill(0); // 2x2 for inventory
+        this.craftingResult = null;
 
-        this.initHotbar();
-        this.initHealthBar();
-        this.initHungerBar();
-        this.initXPBar();
+        // Which crafting mode: 'inventory' (2x2), 'table' (3x3), 'furnace'
+        this.craftingMode = null;
+
+        this.hotbarSlots = [];
+        this.selectedSlot = 0;
+
+        this.buildHotbar();
+        this.setupCraftingUI();
+
+        this.damageFlashAlpha = 0;
     }
 
-    initHotbar() {
+    buildHotbar() {
         this.hotbarEl.innerHTML = '';
+        this.hotbarSlots = [];
+
         for (let i = 0; i < 9; i++) {
             const slot = document.createElement('div');
-            slot.className = 'hotbar-slot';
-            slot.innerHTML = `<span class="slot-number">${i + 1}</span>`;
+            slot.className = 'hotbar-slot' + (i === 0 ? ' selected' : '');
+            const icon = document.createElement('canvas');
+            icon.width = 32;
+            icon.height = 32;
+            icon.className = 'slot-icon';
+            const count = document.createElement('span');
+            count.className = 'slot-count';
+            slot.appendChild(icon);
+            slot.appendChild(count);
             this.hotbarEl.appendChild(slot);
+            this.hotbarSlots.push({ el: slot, icon, count });
         }
     }
 
-    initHealthBar() {
+    setupCraftingUI() {
+        // Crafting overlay will be created dynamically when opened
+        this.craftingOverlay = document.getElementById('crafting-overlay');
+        if (!this.craftingOverlay) {
+            this.craftingOverlay = document.createElement('div');
+            this.craftingOverlay.id = 'crafting-overlay';
+            this.craftingOverlay.style.cssText = `
+                display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+                background: rgba(0,0,0,0.7); z-index: 100; 
+                justify-content: center; align-items: center;
+                font-family: 'Press Start 2P', monospace;
+            `;
+            document.body.appendChild(this.craftingOverlay);
+        }
+    }
+
+    update(player, inventory, world) {
+        this.updateHotbar(inventory);
+        this.updateHealthBar(player);
+        this.updateHungerBar(player);
+        this.updateDebugInfo(player, world);
+        this.updateDamageFlash();
+    }
+
+    updateHotbar(inventory) {
+        for (let i = 0; i < 9; i++) {
+            const slot = this.hotbarSlots[i];
+            const item = inventory.getSlot(i);
+
+            // Selection highlight
+            if (i === inventory.selectedSlot) {
+                slot.el.classList.add('selected');
+            } else {
+                slot.el.classList.remove('selected');
+            }
+
+            if (item) {
+                this.drawItemIcon(slot.icon, item.type);
+                slot.count.textContent = item.count > 1 ? item.count : '';
+            } else {
+                const ctx = slot.icon.getContext('2d');
+                ctx.clearRect(0, 0, 32, 32);
+                slot.count.textContent = '';
+            }
+        }
+    }
+
+    drawItemIcon(canvas, blockType) {
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        const data = BlockData[blockType];
+        if (!data) return;
+
+        // Simple colored square with block name indicator
+        const colors = {
+            [BlockType.GRASS]: '#5F9F35',
+            [BlockType.DIRT]: '#866049',
+            [BlockType.STONE]: '#7D7D7D',
+            [BlockType.SAND]: '#DCD3A0',
+            [BlockType.WOOD]: '#674E31',
+            [BlockType.LEAVES]: '#348228',
+            [BlockType.PLANKS]: '#C29D62',
+            [BlockType.COBBLESTONE]: '#7A7A7A',
+            [BlockType.BEDROCK]: '#555',
+            [BlockType.COAL_ORE]: '#333',
+            [BlockType.IRON_ORE]: '#C4A88F',
+            [BlockType.GOLD_ORE]: '#FFD700',
+            [BlockType.DIAMOND_ORE]: '#2DD',
+            [BlockType.GRAVEL]: '#887E7E',
+            [BlockType.SNOW]: '#F5F5FF',
+            [BlockType.ICE]: '#94BCFF',
+            [BlockType.CACTUS]: '#377826',
+            [BlockType.CLAY]: '#9EA4B0',
+            [BlockType.GLASS]: '#C8DCFF',
+            [BlockType.BRICK]: '#964A36',
+            [BlockType.BOOKSHELF]: '#8B3A3A',
+            [BlockType.CRAFTING_TABLE]: '#C29D62',
+            [BlockType.FURNACE]: '#828282',
+            [BlockType.TNT]: '#C81E1E',
+            [BlockType.TORCH]: '#FFC832',
+            [BlockType.STICK]: '#8C6432',
+            [BlockType.RAW_PORK]: '#C86464',
+            [BlockType.COOKED_PORK]: '#A05032',
+            [BlockType.WOODEN_PICKAXE]: '#C29D62',
+            [BlockType.STONE_PICKAXE]: '#7D7D7D',
+            [BlockType.WOODEN_SWORD]: '#C29D62',
+            [BlockType.STONE_SWORD]: '#7D7D7D',
+            [BlockType.WOODEN_AXE]: '#C29D62',
+        };
+
+        const color = colors[blockType] || '#888';
+
+        // Draw a nice 3D-ish block icon
+        ctx.fillStyle = color;
+        ctx.fillRect(4, 4, 24, 24);
+
+        // Highlight edge (top and left)
+        ctx.fillStyle = 'rgba(255,255,255,0.3)';
+        ctx.fillRect(4, 4, 24, 3);
+        ctx.fillRect(4, 4, 3, 24);
+
+        // Shadow edge (bottom and right)
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        ctx.fillRect(4, 25, 24, 3);
+        ctx.fillRect(25, 4, 3, 24);
+
+        // For items (tools, food), draw a simpler icon shape
+        if (isItem(blockType)) {
+            ctx.clearRect(0, 0, 32, 32);
+            ctx.fillStyle = color;
+            if (blockType === BlockType.STICK) {
+                ctx.fillRect(13, 4, 6, 24);
+            } else if (blockType === BlockType.RAW_PORK || blockType === BlockType.COOKED_PORK) {
+                ctx.beginPath();
+                ctx.ellipse(16, 16, 10, 7, 0, 0, Math.PI * 2);
+                ctx.fill();
+            } else {
+                // Tool shape
+                ctx.fillRect(13, 14, 6, 16); // Handle
+                ctx.fillRect(6, 4, 20, 10); // Head
+            }
+        }
+    }
+
+    updateHealthBar(player) {
+        if (!this.healthBar) return;
         this.healthBar.innerHTML = '';
         for (let i = 0; i < 10; i++) {
-            const heart = document.createElement('div');
+            const heart = document.createElement('span');
             heart.className = 'heart';
+            const hp = player.health - i * 2;
+            if (hp >= 2) heart.textContent = '❤';
+            else if (hp >= 1) { heart.textContent = '💔'; heart.style.opacity = '0.7'; }
+            else { heart.textContent = '🖤'; heart.style.opacity = '0.3'; }
             this.healthBar.appendChild(heart);
         }
     }
 
-    initHungerBar() {
+    updateHungerBar(player) {
+        if (!this.hungerBar) return;
         this.hungerBar.innerHTML = '';
         for (let i = 0; i < 10; i++) {
-            const food = document.createElement('div');
-            food.className = 'food';
+            const food = document.createElement('span');
+            food.className = 'hunger';
+            const h = player.hunger - i * 2;
+            if (h >= 2) food.textContent = '🍖';
+            else if (h >= 1) { food.textContent = '🍖'; food.style.opacity = '0.5'; }
+            else { food.textContent = '🍖'; food.style.opacity = '0.15'; }
             this.hungerBar.appendChild(food);
         }
     }
 
-    initXPBar() {
-        const fill = document.createElement('div');
-        fill.className = 'fill';
-        this.xpBar.appendChild(fill);
-    }
-
-    updateHotbar(inventory, selectedSlot) {
-        const slots = this.hotbarEl.querySelectorAll('.hotbar-slot');
-        for (let i = 0; i < 9; i++) {
-            const slot = slots[i];
-            const item = inventory.slots[i];
-
-            slot.className = 'hotbar-slot' + (i === selectedSlot ? ' selected' : '');
-
-            // Remove old icon
-            const oldCanvas = slot.querySelector('canvas');
-            if (oldCanvas) oldCanvas.remove();
-            const oldCount = slot.querySelector('.slot-count');
-            if (oldCount) oldCount.remove();
-
-            if (item && item.count > 0) {
-                const icon = getBlockIconCanvas(item.type, 32);
-                slot.appendChild(icon);
-
-                if (item.count > 1) {
-                    const count = document.createElement('span');
-                    count.className = 'slot-count';
-                    count.textContent = item.count;
-                    slot.appendChild(count);
-                }
-            }
-        }
-    }
-
-    updateHealth(health, maxHealth) {
-        const hearts = this.healthBar.querySelectorAll('.heart');
-        for (let i = 0; i < 10; i++) {
-            const heartValue = (i + 1) * 2;
-            if (health >= heartValue) {
-                hearts[i].className = 'heart';
-            } else if (health >= heartValue - 1) {
-                hearts[i].className = 'heart half';
-            } else {
-                hearts[i].className = 'heart empty';
-            }
-        }
-    }
-
-    updateHunger(hunger) {
-        const foods = this.hungerBar.querySelectorAll('.food');
-        for (let i = 0; i < 10; i++) {
-            const foodValue = (i + 1) * 2;
-            if (hunger >= foodValue) {
-                foods[i].className = 'food';
-            } else if (hunger >= foodValue - 1) {
-                foods[i].className = 'food half';
-            } else {
-                foods[i].className = 'food empty';
-            }
-        }
-    }
-
-    updateXP(xp) {
-        const fill = this.xpBar.querySelector('.fill');
-        if (fill) fill.style.width = `${(xp % 100)}%`;
-    }
-
-    updateDebugInfo(data) {
+    updateDebugInfo(player, world) {
+        if (!this.debugInfo) return;
+        const pos = player.position;
+        const chunkX = Math.floor(pos.x / 16);
+        const chunkZ = Math.floor(pos.z / 16);
         this.debugInfo.innerHTML = [
-            `Minecraft Clone v1.0`,
-            `FPS: ${data.fps}`,
-            `XYZ: ${data.x.toFixed(1)} / ${data.y.toFixed(1)} / ${data.z.toFixed(1)}`,
-            `Chunk: ${data.chunkX}, ${data.chunkZ}`,
-            `Chunks loaded: ${data.chunksLoaded}`,
-            `Time: ${data.time}`,
-            `Looking at: ${data.lookingAt || 'nothing'}`,
-            `Biome: ${data.biome || 'Plains'}`
+            `XYZ: ${pos.x.toFixed(1)} / ${pos.y.toFixed(1)} / ${pos.z.toFixed(1)}`,
+            `Chunk: ${chunkX}, ${chunkZ}`,
+            `Loaded: ${world.chunks.size}`,
+            player.creative ? `Mode: Creative${player.flying ? ' (Flying)' : ''}` : `Mode: Survival`,
         ].join('<br>');
     }
 
-    toggleInventory(inventory) {
-        this.inventoryOpen = !this.inventoryOpen;
-        this.inventoryScreen.style.display = this.inventoryOpen ? 'flex' : 'none';
-
-        if (this.inventoryOpen) {
-            this.renderInventory(inventory);
+    updateDamageFlash() {
+        let overlay = document.getElementById('damage-overlay');
+        if (!overlay) {
+            overlay = document.createElement('div');
+            overlay.id = 'damage-overlay';
+            overlay.style.cssText = `
+                position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+                background: red; opacity: 0; pointer-events: none; z-index: 50;
+                transition: opacity 0.15s;
+            `;
+            document.body.appendChild(overlay);
+        }
+        if (this.damageFlashAlpha > 0) {
+            overlay.style.opacity = this.damageFlashAlpha;
+            this.damageFlashAlpha = Math.max(0, this.damageFlashAlpha - 0.02);
         }
     }
 
-    renderInventory(inventory) {
-        // Crafting grid
-        this.craftingGrid.innerHTML = '<div class="inv-title">Crafting</div>';
-        for (let i = 0; i < 9; i++) {
-            const slot = document.createElement('div');
-            slot.className = 'inv-slot';
-            if (this.craftingSlots[i]) {
-                const icon = getBlockIconCanvas(this.craftingSlots[i], 28);
-                slot.appendChild(icon);
+    flashDamage() {
+        this.damageFlashAlpha = 0.4;
+    }
+
+    // ===== CRAFTING UI =====
+    openCrafting(mode, inventory) {
+        this.craftingMode = mode;
+        this.craftingGrid = new Array(mode === 'table' ? 9 : 4).fill(0);
+        this.craftingResult = null;
+        this.buildCraftingUI(inventory);
+        this.craftingOverlay.style.display = 'flex';
+        this.craftingOpen = true;
+    }
+
+    closeCrafting(inventory) {
+        // Return items in crafting grid to inventory
+        const grid = this.craftingMode === 'table' ? this.craftingGrid : this.invCraftGrid;
+        for (let i = 0; i < grid.length; i++) {
+            if (grid[i] !== 0) {
+                inventory.addItem(grid[i], 1);
+                grid[i] = 0;
             }
-            slot.addEventListener('click', () => {
-                if (this.selectedInvSlot >= 0) {
-                    const item = inventory.slots[this.selectedInvSlot];
-                    if (item) {
-                        this.craftingSlots[i] = item.type;
-                        this.selectedInvSlot = -1;
-                        this.renderInventory(inventory);
-                        this.checkCrafting(inventory);
-                    }
-                } else {
-                    this.craftingSlots[i] = 0;
-                    this.renderInventory(inventory);
-                    this.checkCrafting(inventory);
-                }
-            });
-            this.craftingGrid.appendChild(slot);
+        }
+        this.craftingOverlay.style.display = 'none';
+        this.craftingOpen = false;
+        this.craftingMode = null;
+    }
+
+    buildCraftingUI(inventory) {
+        const mode = this.craftingMode;
+        const gridSize = mode === 'table' ? 3 : 2;
+        const grid = mode === 'table' ? this.craftingGrid : this.invCraftGrid;
+        const title = mode === 'table' ? 'Crafting Table' : mode === 'furnace' ? 'Furnace' : 'Inventory';
+
+        this.craftingOverlay.innerHTML = `
+            <div style="background: #c6c6c6; border: 3px solid #555; padding: 16px; border-radius: 4px; min-width: 320px;">
+                <div style="color: #404040; font-size: 10px; margin-bottom: 12px; text-align: center;">${title}</div>
+                <div style="display: flex; gap: 20px; align-items: center; justify-content: center;">
+                    <div id="craft-grid" style="display: grid; grid-template-columns: repeat(${gridSize}, 40px); gap: 2px;"></div>
+                    <div style="font-size: 20px; color: #555;">→</div>
+                    <div id="craft-result" style="width: 44px; height: 44px; background: #8b8b8b; border: 2px solid #555; cursor: pointer; display: flex; align-items: center; justify-content: center;"></div>
+                </div>
+                ${mode !== 'furnace' ? `
+                <div style="margin-top: 16px; border-top: 2px solid #999; padding-top: 12px;">
+                    <div style="color: #404040; font-size: 8px; margin-bottom: 8px;">Inventory</div>
+                    <div id="craft-inventory" style="display: grid; grid-template-columns: repeat(9, 40px); gap: 2px;"></div>
+                </div>` : ''}
+                <div style="text-align: center; margin-top: 12px;">
+                    <span style="color: #666; font-size: 7px;">Press E or Escape to close</span>
+                </div>
+            </div>
+        `;
+
+        // Fill crafting grid
+        const gridEl = document.getElementById('craft-grid');
+        for (let i = 0; i < gridSize * gridSize; i++) {
+            const cell = document.createElement('div');
+            cell.style.cssText = 'width: 40px; height: 40px; background: #8b8b8b; border: 2px solid #555; cursor: pointer; display: flex; align-items: center; justify-content: center;';
+            cell.dataset.index = i;
+            cell.addEventListener('click', () => this.handleCraftGridClick(i, inventory));
+            this.updateCraftCell(cell, grid[i]);
+            gridEl.appendChild(cell);
         }
 
-        // Crafting result
-        this.craftingResult.innerHTML = '';
-        const result = checkRecipe(this.craftingSlots);
+        // Fill inventory slots
+        const invEl = document.getElementById('craft-inventory');
+        if (invEl) {
+            for (let i = 0; i < 36; i++) {
+                const cell = document.createElement('div');
+                cell.style.cssText = `width: 40px; height: 40px; background: ${i < 9 ? '#a0a0a0' : '#8b8b8b'}; border: 2px solid #555; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 7px; color: #fff; position: relative;`;
+                cell.dataset.invIndex = i;
+                cell.addEventListener('click', () => this.handleInvSlotClick(i, inventory));
+                const item = inventory.getSlot(i);
+                this.updateInvCell(cell, item);
+                invEl.appendChild(cell);
+            }
+        }
+
+        // Result click
+        document.getElementById('craft-result').addEventListener('click', () => this.handleCraftResult(inventory));
+
+        this.updateCraftingResult();
+    }
+
+    updateCraftCell(cell, blockType) {
+        if (blockType && blockType !== 0) {
+            const data = BlockData[blockType];
+            cell.style.background = this.getBlockColor(blockType);
+            cell.textContent = data ? data.name.substring(0, 2) : '?';
+            cell.style.color = '#fff';
+            cell.style.fontSize = '7px';
+            cell.style.textShadow = '1px 1px #000';
+        } else {
+            cell.style.background = '#8b8b8b';
+            cell.textContent = '';
+        }
+    }
+
+    updateInvCell(cell, item) {
+        if (item) {
+            const data = BlockData[item.type];
+            cell.style.background = this.getBlockColor(item.type);
+            cell.innerHTML = `<span style="font-size:7px;color:#fff;text-shadow:1px 1px #000;">${data ? data.name.substring(0, 2) : '?'}</span>`;
+            if (item.count > 1) {
+                cell.innerHTML += `<span style="position:absolute;bottom:1px;right:2px;font-size:6px;color:#fff;text-shadow:1px 1px #000;">${item.count}</span>`;
+            }
+        } else {
+            cell.innerHTML = '';
+            cell.style.background = '#8b8b8b';
+        }
+    }
+
+    getBlockColor(type) {
+        const colorMap = {
+            [BlockType.GRASS]: '#5F9F35', [BlockType.DIRT]: '#866049', [BlockType.STONE]: '#7D7D7D',
+            [BlockType.SAND]: '#DCD3A0', [BlockType.WOOD]: '#674E31', [BlockType.LEAVES]: '#348228',
+            [BlockType.PLANKS]: '#C29D62', [BlockType.COBBLESTONE]: '#7A7A7A', [BlockType.COAL_ORE]: '#444',
+            [BlockType.IRON_ORE]: '#C4A88F', [BlockType.GOLD_ORE]: '#C8A800', [BlockType.DIAMOND_ORE]: '#2AA',
+            [BlockType.GRAVEL]: '#887E7E', [BlockType.SNOW]: '#E8E8F0', [BlockType.ICE]: '#7AA8E0',
+            [BlockType.CACTUS]: '#377826', [BlockType.CLAY]: '#9EA4B0', [BlockType.GLASS]: '#A0B8D0',
+            [BlockType.BRICK]: '#964A36', [BlockType.BOOKSHELF]: '#8B3A3A', [BlockType.CRAFTING_TABLE]: '#C29D62',
+            [BlockType.FURNACE]: '#828282', [BlockType.TNT]: '#C81E1E', [BlockType.TORCH]: '#FFC832',
+            [BlockType.STICK]: '#8C6432', [BlockType.RAW_PORK]: '#C86464', [BlockType.COOKED_PORK]: '#A05032',
+            [BlockType.WOODEN_PICKAXE]: '#B08050', [BlockType.STONE_PICKAXE]: '#909090',
+            [BlockType.WOODEN_SWORD]: '#B08050', [BlockType.STONE_SWORD]: '#909090',
+            [BlockType.WOODEN_AXE]: '#B08050',
+        };
+        return colorMap[type] || '#888';
+    }
+
+    // Selected item to place in grid (cursor)
+    _cursorItem = null;
+    _cursorSlot = -1;
+
+    handleInvSlotClick(index, inventory) {
+        if (this._cursorItem) {
+            // Place cursor item into slot
+            const existing = inventory.getSlot(index);
+            if (!existing) {
+                inventory.slots[index] = { ...this._cursorItem };
+                this._cursorItem = null;
+                this._cursorSlot = -1;
+            } else if (existing.type === this._cursorItem.type && existing.count < 64) {
+                existing.count += this._cursorItem.count;
+                if (existing.count > 64) {
+                    this._cursorItem.count = existing.count - 64;
+                    existing.count = 64;
+                } else {
+                    this._cursorItem = null;
+                    this._cursorSlot = -1;
+                }
+            } else {
+                // Swap
+                inventory.slots[index] = { ...this._cursorItem };
+                this._cursorItem = existing;
+            }
+        } else {
+            // Pick up item from slot
+            const item = inventory.getSlot(index);
+            if (item) {
+                this._cursorItem = { ...item };
+                this._cursorSlot = index;
+                inventory.slots[index] = null;
+            }
+        }
+        this.buildCraftingUI(inventory);
+    }
+
+    handleCraftGridClick(index, inventory) {
+        const grid = this.craftingMode === 'table' ? this.craftingGrid : this.invCraftGrid;
+
+        if (this._cursorItem) {
+            // Place cursor item into craft grid
+            if (grid[index] === 0) {
+                grid[index] = this._cursorItem.type;
+                this._cursorItem.count--;
+                if (this._cursorItem.count <= 0) {
+                    this._cursorItem = null;
+                    this._cursorSlot = -1;
+                }
+            }
+        } else {
+            // Pick up from craft grid back to cursor
+            if (grid[index] !== 0) {
+                this._cursorItem = { type: grid[index], count: 1 };
+                grid[index] = 0;
+            }
+        }
+
+        this.updateCraftingResult();
+        this.buildCraftingUI(inventory);
+    }
+
+    handleCraftResult(inventory) {
+        const grid = this.craftingMode === 'table' ? this.craftingGrid : this.invCraftGrid;
+        const gridSize = this.craftingMode === 'table' ? 3 : 2;
+        const result = checkRecipe(grid, gridSize);
+
         if (result) {
-            const resultSlot = document.createElement('div');
-            resultSlot.className = 'inv-slot';
-            resultSlot.style.borderColor = '#ffd700';
-            const icon = getBlockIconCanvas(result.type, 28);
-            resultSlot.appendChild(icon);
-            const count = document.createElement('span');
-            count.className = 'slot-count';
-            count.textContent = result.count;
-            resultSlot.appendChild(count);
-            resultSlot.addEventListener('click', () => {
-                inventory.addItem(result.type, result.count);
-                this.craftingSlots.fill(0);
-                this.renderInventory(inventory);
-            });
-            this.craftingResult.appendChild(resultSlot);
-        }
+            // Add result to inventory
+            inventory.addItem(result.type, result.count);
 
-        // Player inventory
-        this.playerInventory.innerHTML = '<div class="inv-title" style="grid-column: 1/-1">Inventory</div>';
-        for (let i = 0; i < 36; i++) {
-            const slot = document.createElement('div');
-            slot.className = 'inv-slot' + (i === this.selectedInvSlot ? ' selected' : '');
-            const item = inventory.slots[i];
-            if (item && item.count > 0) {
-                const icon = getBlockIconCanvas(item.type, 28);
-                slot.appendChild(icon);
-                if (item.count > 1) {
-                    const c = document.createElement('span');
-                    c.className = 'slot-count';
-                    c.textContent = item.count;
-                    slot.appendChild(c);
-                }
+            // Remove one of each ingredient from grid
+            for (let i = 0; i < grid.length; i++) {
+                if (grid[i] !== 0) grid[i] = 0;
             }
-            slot.addEventListener('click', () => {
-                if (this.selectedInvSlot === i) {
-                    this.selectedInvSlot = -1;
-                } else if (this.selectedInvSlot >= 0) {
-                    inventory.swapSlots(this.selectedInvSlot, i);
-                    this.selectedInvSlot = -1;
-                } else {
-                    this.selectedInvSlot = i;
-                }
-                this.renderInventory(inventory);
-            });
-            this.playerInventory.appendChild(slot);
+
+            this.updateCraftingResult();
+            this.buildCraftingUI(inventory);
         }
     }
 
-    checkCrafting(inventory) {
-        const result = checkRecipe(this.craftingSlots);
-        this.renderInventory(inventory);
+    updateCraftingResult() {
+        const grid = this.craftingMode === 'table' ? this.craftingGrid : this.invCraftGrid;
+        const gridSize = this.craftingMode === 'table' ? 3 : 2;
+        this.craftingResult = checkRecipe(grid, gridSize);
+
+        const resultEl = document.getElementById('craft-result');
+        if (resultEl && this.craftingResult) {
+            const data = BlockData[this.craftingResult.type];
+            resultEl.style.background = this.getBlockColor(this.craftingResult.type);
+            resultEl.innerHTML = `<span style="font-size:7px;color:#fff;text-shadow:1px 1px #000;">${data ? data.name.substring(0, 3) : '?'}${this.craftingResult.count > 1 ? ' x' + this.craftingResult.count : ''}</span>`;
+        } else if (resultEl) {
+            resultEl.style.background = '#8b8b8b';
+            resultEl.innerHTML = '';
+        }
     }
 
-    showDeathScreen(score) {
-        this.deathScreen.style.display = 'flex';
-        document.getElementById('death-score').textContent = `Score: ${score}`;
-    }
-
-    hideDeathScreen() {
-        this.deathScreen.style.display = 'none';
-    }
-
-    showPauseMenu() {
-        this.pauseMenu.style.display = 'flex';
-    }
-
-    hidePauseMenu() {
-        this.pauseMenu.style.display = 'none';
+    selectSlot(index) {
+        this.selectedSlot = index;
     }
 }
