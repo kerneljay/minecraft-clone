@@ -262,10 +262,10 @@ export class Chunk {
                             if (neighbor === block && isBlockTransparent(block)) continue;
                         }
 
-                        // Add face
+                        // Add face — use WORLD coordinates so chunks render at correct position
                         const vi = p.length / 3;
                         const faceUVs = getUVsForFace(block, face);
-                        const faceVerts = getFaceVertices(lx, ly, lz, face);
+                        const faceVerts = getFaceVertices(wx0 + lx, ly, wz0 + lz, face);
 
                         for (let i = 0; i < 4; i++) {
                             p.push(faceVerts[i * 3], faceVerts[i * 3 + 1], faceVerts[i * 3 + 2]);
