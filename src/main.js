@@ -2,6 +2,7 @@
 // FIX: Right arm attached to camera, crafting hotkeys, creative mode toggle, proper block interaction
 
 import * as THREE from 'three';
+import { inject } from '@vercel/analytics';
 import { World } from './world.js';
 import { Player } from './player.js';
 import { Inventory } from './inventory.js';
@@ -11,6 +12,9 @@ import { UI } from './ui.js';
 import { createTextureAtlas, setAtlasCanvas, ATLAS_TILES } from './textures.js';
 import { BlockType, BlockData, isItem } from './blocks.js';
 import { CHUNK_SIZE } from './chunk.js';
+
+// Vercel analytics
+inject();
 
 // ===== GAME STATE =====
 let renderer, scene, camera;
@@ -98,9 +102,18 @@ function showMainMenu() {
     if (modeSelect) modeSelect.style.display = 'none';
 }
 
-function startGame(mode) {
+async function startGame(mode) {
     gameMode = mode;
     document.getElementById('title-screen').style.display = 'none';
+
+    // Show loading screen
+    const loadingScreen = document.getElementById('loading-screen');
+    if (loadingScreen) loadingScreen.style.display = 'flex';
+    const loadingText = document.getElementById('loading-text');
+    if (loadingText) loadingText.textContent = 'Building Terrain...';
+
+    // Let the loading screen render before heavy work
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
 
     // Setup Three.js
     scene = new THREE.Scene();
@@ -195,7 +208,8 @@ function startGame(mode) {
     clock = new THREE.Clock();
     lastHealth = player.health;
 
-    // Show HUD
+    // Hide loading screen, show HUD
+    if (loadingScreen) loadingScreen.style.display = 'none';
     document.getElementById('hud').style.display = 'block';
     document.getElementById('crosshair').style.display = 'block';
 
