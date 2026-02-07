@@ -577,16 +577,17 @@ function initMiningCrack() {
             const ctx = canvas.getContext('2d');
             ctx.drawImage(img, 0, 0);
 
-            // Convert all pixel colors to black, keep alpha
+            // Convert to dark semi-transparent tones (not solid black)
             const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
             const data = imageData.data;
             for (let p = 0; p < data.length; p += 4) {
                 if (data[p + 3] > 0) {
-                    // Make pixel black, keep original alpha
-                    data[p] = 0;     // R
-                    data[p + 1] = 0; // G
-                    data[p + 2] = 0; // B
-                    // Alpha stays as-is
+                    // Dark tone, not pure black
+                    data[p] = 20;     // R
+                    data[p + 1] = 20; // G
+                    data[p + 2] = 20; // B
+                    // Reduce alpha for semi-transparent look
+                    data[p + 3] = Math.floor(data[p + 3] * 0.6);
                 }
             }
             ctx.putImageData(imageData, 0, 0);

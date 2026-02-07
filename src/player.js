@@ -93,18 +93,18 @@ export class Player {
     }
 
     createRightArm() {
-        // Slim Minecraft first-person arm — shorter (2/3), thin
+        // Slim Minecraft first-person arm — wider, shifted right
         const armGroup = new THREE.Group();
 
-        // Slim forearm (2/3 of previous length)
-        const armGeo = new THREE.BoxGeometry(0.12, 1.2, 0.10);
+        // Forearm — 33% wider than before
+        const armGeo = new THREE.BoxGeometry(0.16, 1.2, 0.13);
         const armMat = new THREE.MeshLambertMaterial({ color: 0xd4a574 });
         const arm = new THREE.Mesh(armGeo, armMat);
         arm.position.set(0, -0.3, 0);
         armGroup.add(arm);
 
-        // Small fist at the bottom
-        const fistGeo = new THREE.BoxGeometry(0.15, 0.14, 0.14);
+        // Fist at the bottom — also wider
+        const fistGeo = new THREE.BoxGeometry(0.20, 0.14, 0.18);
         const fistMat = new THREE.MeshLambertMaterial({ color: 0xc89860 });
         const fist = new THREE.Mesh(fistGeo, fistMat);
         fist.position.set(0, -0.95, 0);
@@ -112,7 +112,6 @@ export class Player {
 
         return armGroup;
     }
-
     setupControls() {
         document.addEventListener('keydown', (e) => {
             this.keys[e.code] = true;
@@ -365,7 +364,7 @@ export class Player {
             const swing = Math.sin(this.armSwing) * 0.5;
             const mineSwing = Math.sin(this.mineSwingAngle) * 0.45;
             const totalSwing = swing + mineSwing;
-            this.rightArm.position.set(0.35, -0.35 - totalSwing * 0.08, -0.55 + totalSwing * 0.15);
+            this.rightArm.position.set(0.45, -0.35 - totalSwing * 0.08, -0.55 + totalSwing * 0.15);
             this.rightArm.rotation.x = -1.2 - totalSwing * 0.5; // Base angle forward (~70°)
             this.rightArm.rotation.z = -0.1;
         }
@@ -397,7 +396,7 @@ export class Player {
 
         const origin = this.camera.position.clone();
         const step = 0.05;
-        let prevX = -1, prevY = -1, prevZ = -1;
+        let prevX = null, prevY = null, prevZ = null;
 
         for (let t = 0; t < this.reach; t += step) {
             const px = origin.x + dir.x * t;
@@ -529,7 +528,7 @@ export class Player {
         const hit = this.raycast();
         if (!hit) return false;
         // Reject if no valid previous position (ray hit on first step)
-        if (hit.prevPos.x < 0 || hit.prevPos.y < 0 || hit.prevPos.z < 0) return false;
+        if (hit.prevPos.x === null || hit.prevPos.y === null || hit.prevPos.z === null) return false;
 
         const held = inventory.getHeldItem();
         if (!held) return false;
