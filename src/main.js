@@ -562,72 +562,44 @@ let crackMesh = null;
 let crackTextures = [];
 
 function initMiningCrack() {
-    // Generate 10 stages of black crack textures on transparent background
-    const size = 16;
+    // Load user's destroy stage PNGs and convert white/gray to black via canvas
+    const loader = new THREE.TextureLoader();
     const stages = 10;
+    let loadedCount = 0;
 
-    // Crack patterns: each stage is an array of line segments [x1, y1, x2, y2]
-    // Horizontal and vertical only, progressively more coverage
-    const patterns = [
-        // Stage 0: very few small cracks
-        [[4, 3, 4, 5], [11, 8, 11, 10]],
-        // Stage 1: a few more
-        [[4, 3, 4, 6], [11, 7, 11, 11], [7, 2, 9, 2]],
-        // Stage 2: spreading
-        [[3, 2, 3, 6], [11, 6, 11, 12], [6, 2, 10, 2], [5, 9, 5, 12]],
-        // Stage 3: more lines
-        [[2, 1, 2, 7], [11, 5, 11, 13], [5, 1, 11, 1], [5, 9, 5, 13], [8, 6, 13, 6]],
-        // Stage 4: medium coverage
-        [[2, 1, 2, 8], [10, 4, 10, 14], [4, 1, 12, 1], [4, 9, 4, 14], [7, 5, 14, 5], [1, 10, 6, 10]],
-        // Stage 5: getting denser
-        [[1, 0, 1, 9], [10, 3, 10, 15], [3, 0, 13, 0], [3, 8, 3, 15], [6, 4, 15, 4], [0, 10, 7, 10], [13, 7, 13, 13]],
-        // Stage 6: significant coverage
-        [[1, 0, 1, 10], [9, 2, 9, 15], [2, 0, 14, 0], [3, 7, 3, 15], [5, 3, 15, 3], [0, 9, 8, 9], [13, 6, 13, 14], [6, 12, 12, 12]],
-        // Stage 7: heavy cracks
-        [[0, 0, 0, 11], [8, 1, 8, 15], [1, 0, 15, 0], [2, 6, 2, 15], [4, 2, 15, 2], [0, 8, 9, 8], [12, 5, 12, 15], [5, 11, 13, 11], [14, 3, 14, 10]],
-        // Stage 8: very heavy
-        [[0, 0, 0, 12], [7, 0, 7, 15], [0, 0, 15, 0], [2, 5, 2, 15], [4, 1, 15, 1], [0, 7, 10, 7], [11, 4, 11, 15], [4, 10, 14, 10], [14, 2, 14, 11], [0, 13, 8, 13]],
-        // Stage 9: almost fully cracked
-        [[0, 0, 0, 15], [6, 0, 6, 15], [12, 0, 12, 15], [0, 0, 15, 0], [1, 4, 1, 15], [3, 1, 15, 1], [0, 6, 15, 6], [10, 3, 10, 15], [3, 10, 15, 10], [14, 1, 14, 12], [0, 13, 15, 13], [4, 3, 15, 3]],
-    ];
+    for (let i = 0; i < stages; i++) {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0);
 
-    for (let stage = 0; stage < stages; stage++) {
-        const canvas = document.createElement('canvas');
-        canvas.width = size;
-        canvas.height = size;
-        const ctx = canvas.getContext('2d');
-
-        // Transparent background
-        ctx.clearRect(0, 0, size, size);
-
-        // Draw black cracks with slight transparency
-        const alpha = 0.5 + stage * 0.05; // 0.5 to 0.95
-        ctx.strokeStyle = `rgba(0, 0, 0, ${alpha})`;
-        ctx.lineWidth = 1;
-
-        const lines = patterns[stage];
-        for (const [x1, y1, x2, y2] of lines) {
-            ctx.beginPath();
-            ctx.moveTo(x1 + 0.5, y1 + 0.5);
-            ctx.lineTo(x2 + 0.5, y2 + 0.5);
-            ctx.stroke();
-        }
-
-        // For later stages, also fill some dark pixels for extra density
-        if (stage >= 6) {
-            ctx.fillStyle = `rgba(0, 0, 0, ${0.2 + (stage - 6) * 0.1})`;
-            const fillDensity = (stage - 5) * 8;
-            for (let f = 0; f < fillDensity; f++) {
-                const fx = Math.floor(Math.random() * size);
-                const fy = Math.floor(Math.random() * size);
-                ctx.fillRect(fx, fy, 1, 1);
+            // Convert all pixel colors to black, keep alpha
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imageData.data;
+            for (let p = 0; p < data.length; p += 4) {
+                if (data[p + 3] > 0) {
+                    // Make pixel black, keep original alpha
+                    data[p] = 0;     // R
+                    data[p + 1] = 0; // G
+                    data[p + 2] = 0; // B
+                    // Alpha stays as-is
+                }
             }
-        }
+            ctx.putImageData(imageData, 0, 0);
 
-        const tex = new THREE.CanvasTexture(canvas);
-        tex.magFilter = THREE.NearestFilter;
-        tex.minFilter = THREE.NearestFilter;
-        crackTextures.push(tex);
+            const tex = new THREE.CanvasTexture(canvas);
+            tex.magFilter = THREE.NearestFilter;
+            tex.minFilter = THREE.NearestFilter;
+            crackTextures[i] = tex;
+            loadedCount++;
+        };
+        img.src = `/destroy_stage/Destroy_stage_${i}.png`;
+        // Placeholder until loaded
+        crackTextures[i] = new THREE.Texture();
     }
 
     // Create the crack mesh — slightly larger than a block to avoid z-fighting

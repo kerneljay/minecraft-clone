@@ -539,13 +539,26 @@ export class Player {
 
         const { x, y, z } = hit.prevPos;
 
-        // Don't place inside player
+        // Don't place if target block already occupied
+        const existing = world.getBlock(x, y, z);
+        if (existing !== BlockType.AIR && existing !== BlockType.WATER) return false;
+
+        // Don't place inside player — proper AABB overlap test
         const hw = this.width / 2;
-        if (x >= Math.floor(this.position.x - hw) && x <= Math.floor(this.position.x + hw) &&
-            z >= Math.floor(this.position.z - hw) && z <= Math.floor(this.position.z + hw) &&
-            y >= Math.floor(this.position.y) && y <= Math.floor(this.position.y + this.height)) {
-            return false;
-        }
+        const playerMinX = this.position.x - hw;
+        const playerMaxX = this.position.x + hw;
+        const playerMinY = this.position.y;
+        const playerMaxY = this.position.y + this.height;
+        const playerMinZ = this.position.z - hw;
+        const playerMaxZ = this.position.z + hw;
+
+        // Block occupies [x, x+1] x [y, y+1] x [z, z+1]
+        const overlap = (
+            playerMinX < x + 1 && playerMaxX > x &&
+            playerMinY < y + 1 && playerMaxY > y &&
+            playerMinZ < z + 1 && playerMaxZ > z
+        );
+        if (overlap) return false;
 
         world.setBlock(x, y, z, held.type);
         this.swingArm();
