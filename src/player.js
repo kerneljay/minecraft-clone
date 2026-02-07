@@ -242,12 +242,6 @@ export class Player {
         }
 
         this.position.copy(newPos);
-
-        // Keep above bedrock
-        if (this.position.y < 1) {
-            this.position.y = 80;
-            this.velocity.y = 0;
-        }
     }
 
     checkCollision(pos) {
@@ -533,7 +527,9 @@ export class Player {
 
     placeBlock(world, inventory) {
         const hit = this.raycast();
-        if (!hit || hit.prevPos.x < 0) return false;
+        if (!hit) return false;
+        // Reject if no valid previous position (ray hit on first step)
+        if (hit.prevPos.x < 0 || hit.prevPos.y < 0 || hit.prevPos.z < 0) return false;
 
         const held = inventory.getHeldItem();
         if (!held) return false;

@@ -383,21 +383,13 @@ export class Chunk {
                         const faceUVs = getUVsForFace(block, face);
                         const faceVerts = getFaceVertices(wx0 + lx, ly, wz0 + lz, face);
 
-                        // Determine foliage value for this face
-                        const isFoliageBlock = block === BlockType.LEAVES || block === BlockType.GRASS;
+                        // Determine foliage value for this face — only LEAVES wave
+                        const isFoliageBlock = block === BlockType.LEAVES;
                         for (let i = 0; i < 4; i++) {
                             p.push(faceVerts[i * 3], faceVerts[i * 3 + 1], faceVerts[i * 3 + 2]);
                             n.push(dir[0], dir[1], dir[2]);
-                            if (!isWater && isFoliageBlock) {
-                                // For leaves: all vertices wave. For grass: only top face waves.
-                                if (block === BlockType.LEAVES) {
-                                    foliage.push(1);
-                                } else {
-                                    // GRASS: top face (face 0) gets foliage
-                                    foliage.push(face === 0 ? 1 : 0);
-                                }
-                            } else if (!isWater) {
-                                foliage.push(0);
+                            if (!isWater) {
+                                foliage.push(isFoliageBlock ? 1 : 0);
                             }
                         }
                         u.push(

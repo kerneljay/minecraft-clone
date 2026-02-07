@@ -275,6 +275,10 @@ async function startGame(mode) {
 
     document.addEventListener('pointerlockchange', () => {
         player.mouseLocked = document.pointerLockElement === renderer.domElement;
+        // Cancel mining when pointer lock is lost
+        if (!player.mouseLocked) {
+            player.cancelMining();
+        }
     });
 
     window.addEventListener('resize', () => {
@@ -652,6 +656,12 @@ function animate() {
 
     // Check death
     if (player.health <= 0 && !isDead) {
+        showDeathScreen();
+    }
+
+    // Void death — fell below the world
+    if (player.position.y < -10 && !isDead) {
+        player.health = 0;
         showDeathScreen();
     }
 
