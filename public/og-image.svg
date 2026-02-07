@@ -1,0 +1,120 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#4a90d9"/>
+      <stop offset="70%" stop-color="#87ceeb"/>
+      <stop offset="100%" stop-color="#b8e0f0"/>
+    </linearGradient>
+    <linearGradient id="grass" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#5d9f3a"/>
+      <stop offset="100%" stop-color="#4a8a2e"/>
+    </linearGradient>
+    <linearGradient id="dirt" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#8b6045"/>
+      <stop offset="100%" stop-color="#75503a"/>
+    </linearGradient>
+    <filter id="shadow">
+      <feDropShadow dx="3" dy="3" stdDeviation="0" flood-color="#1a1a1a" flood-opacity="0.8"/>
+    </filter>
+    <filter id="textshadow">
+      <feDropShadow dx="4" dy="4" stdDeviation="1" flood-color="#000" flood-opacity="0.7"/>
+    </filter>
+  </defs>
+
+  <!-- Sky -->
+  <rect width="1200" height="630" fill="url(#sky)"/>
+  
+  <!-- Clouds -->
+  <g opacity="0.9">
+    <rect x="100" y="60" width="120" height="30" rx="2" fill="white"/>
+    <rect x="130" y="45" width="60" height="30" rx="2" fill="white"/>
+    <rect x="400" y="90" width="150" height="30" rx="2" fill="white"/>
+    <rect x="430" y="75" width="90" height="30" rx="2" fill="white"/>
+    <rect x="800" y="50" width="180" height="30" rx="2" fill="white"/>
+    <rect x="840" y="35" width="100" height="30" rx="2" fill="white"/>
+    <rect x="1020" y="100" width="100" height="25" rx="2" fill="white"/>
+  </g>
+
+  <!-- Sun -->
+  <rect x="950" y="40" width="60" height="60" fill="#fff4a0" rx="4"/>
+  
+  <!-- Mountains / Hills background -->
+  <polygon points="0,430 80,340 160,380 300,300 400,350 500,310 600,360 700,330 820,290 900,340 1000,320 1100,350 1200,380 1200,430" fill="#4d8a30"/>
+  
+  <!-- Dirt layer -->
+  <rect x="0" y="430" width="1200" height="80" fill="url(#dirt)"/>
+  
+  <!-- Grass top layer -->
+  <rect x="0" y="420" width="1200" height="20" fill="url(#grass)"/>
+  
+  <!-- Grass blocks pattern on surface -->
+  <g fill="#5d9f3a" opacity="0.5">
+    <rect x="0" y="430" width="40" height="4"/>
+    <rect x="80" y="430" width="40" height="4"/>
+    <rect x="200" y="430" width="40" height="4"/>
+    <rect x="360" y="430" width="40" height="4"/>
+    <rect x="500" y="430" width="40" height="4"/>
+    <rect x="680" y="430" width="40" height="4"/>
+    <rect x="840" y="430" width="40" height="4"/>
+    <rect x="1000" y="430" width="40" height="4"/>
+    <rect x="1120" y="430" width="40" height="4"/>
+  </g>
+  
+  <!-- Pixel grid lines on dirt -->
+  <g stroke="#6b4f35" stroke-width="0.5" opacity="0.3">
+    <line x1="0" y1="450" x2="1200" y2="450"/>
+    <line x1="0" y1="470" x2="1200" y2="470"/>
+    <line x1="0" y1="490" x2="1200" y2="490"/>
+  </g>
+
+  <!-- Stone layer -->
+  <rect x="0" y="510" width="1200" height="120" fill="#808080"/>
+  <g fill="#707070" opacity="0.5">
+    <rect x="40" y="520" width="20" height="20"/>
+    <rect x="200" y="540" width="20" height="20"/>
+    <rect x="500" y="520" width="20" height="20"/>
+    <rect x="800" y="550" width="20" height="20"/>
+    <rect x="1050" y="530" width="20" height="20"/>
+  </g>
+
+  <!-- Tree 1 (left) -->
+  <rect x="180" y="340" width="20" height="80" fill="#8B6914"/>
+  <rect x="160" y="300" width="60" height="50" fill="#2d8a2d" rx="2"/>
+  <rect x="170" y="285" width="40" height="25" fill="#35a035" rx="2"/>
+  
+  <!-- Tree 2 (center-left) -->
+  <rect x="430" y="320" width="20" height="100" fill="#8B6914"/>
+  <rect x="405" y="270" width="70" height="60" fill="#2d8a2d" rx="2"/>
+  <rect x="415" y="250" width="50" height="30" fill="#35a035" rx="2"/>
+  
+  <!-- Tree 3 (right) -->
+  <rect x="880" y="340" width="20" height="80" fill="#8B6914"/>
+  <rect x="855" y="295" width="70" height="55" fill="#2d8a2d" rx="2"/>
+  <rect x="865" y="275" width="50" height="30" fill="#35a035" rx="2"/>
+  
+  <!-- Tree 4 (far right) -->
+  <rect x="1060" y="350" width="16" height="70" fill="#8B6914"/>
+  <rect x="1042" y="310" width="52" height="48" fill="#2d8a2d" rx="2"/>
+  <rect x="1050" y="295" width="36" height="22" fill="#35a035" rx="2"/>
+
+  <!-- Glass block icon (center feature) -->
+  <g transform="translate(560, 360) scale(1.5)" filter="url(#shadow)">
+    <polygon points="0,-30 30,-15 30,15 0,30 -30,15 -30,-15" fill="#a8d8ea" opacity="0.6" stroke="#5a8a9e" stroke-width="1.5"/>
+    <polygon points="0,-30 30,-15 0,0 -30,-15" fill="#c4e8f5" opacity="0.7" stroke="#5a8a9e" stroke-width="1"/>
+    <polygon points="30,-15 30,15 0,30 0,0" fill="#7bb8d0" opacity="0.6" stroke="#5a8a9e" stroke-width="1"/>
+    <polygon points="-30,-15 0,0 0,30 -30,15" fill="#92c8dd" opacity="0.6" stroke="#5a8a9e" stroke-width="1"/>
+    <line x1="-15" y1="-5" x2="-15" y2="12" stroke="white" stroke-width="1" opacity="0.5"/>
+    <line x1="-15" y1="12" x2="-5" y2="12" stroke="white" stroke-width="1" opacity="0.5"/>
+    <rect x="-22" y="-10" width="5" height="4" fill="white" opacity="0.4" rx="0.5"/>
+  </g>
+
+  <!-- Title text: "MineClone" -->
+  <text x="600" y="180" text-anchor="middle" font-family="'Press Start 2P', 'Courier New', monospace" font-size="72" fill="white" filter="url(#textshadow)" font-weight="bold" letter-spacing="4">MineClone</text>
+  
+  <!-- Subtitle -->
+  <text x="600" y="228" text-anchor="middle" font-family="'Press Start 2P', 'Courier New', monospace" font-size="22" fill="#e0e0e0" filter="url(#textshadow)">Browser Edition</text>
+  
+  <!-- Bottom bar -->
+  <rect x="0" y="600" width="1200" height="30" fill="#1a1a1a" opacity="0.7"/>
+  <text x="600" y="622" text-anchor="middle" font-family="'Press Start 2P', 'Courier New', monospace" font-size="12" fill="#aaa">Play free in your browser — No download required</text>
+</svg>
