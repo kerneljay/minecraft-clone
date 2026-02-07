@@ -240,6 +240,8 @@ async function startGame(mode) {
     droppedItems = new DroppedItems(scene);
     // Expose droppedItems globally so player mining can use it
     window._droppedItems = droppedItems;
+    // Expose world globally so item drops can check block solidity
+    window._world = world;
 
     // UI
     ui = new UI();
@@ -453,50 +455,91 @@ class DroppedItems {
         const geo = new THREE.BoxGeometry(0.25, 0.25, 0.25);
         const mat = new THREE.MeshLambertMaterial({ color });
         const mesh = new THREE.Mesh(geo, mat);
-        mesh.position.set(x + 0.5, y + 0.3, z + 0.5);
+        // Spawn slightly above center with small random offset
+        mesh.position.set(
+            x + 0.3 + Math.random() * 0.4,
+            y + 0.5,
+            z + 0.3 + Math.random() * 0.4
+        );
         mesh.castShadow = true;
         this.scene.add(mesh);
 
         this.items.push({
             mesh,
             type: blockType,
-            baseY: y + 0.3,
+            vy: 2, // small upward pop
             time: 0,
             collected: false,
+            grounded: false,
         });
     }
 
     update(dt, playerPos, inventory) {
+        const gravity = 20;
+
         for (let i = this.items.length - 1; i >= 0; i--) {
             const item = this.items[i];
             item.time += dt;
 
-            // Gentle bob and spin
-            item.mesh.position.y = item.baseY + Math.sin(item.time * 2.5) * 0.1;
+            // Spin
             item.mesh.rotation.y += dt * 2;
 
-            // Check pickup distance
+            // Gravity physics
+            if (!item.grounded) {
+                item.vy -= gravity * dt;
+                item.mesh.position.y += item.vy * dt;
+
+                // Check if landed on a solid block
+                const bx = Math.floor(item.mesh.position.x);
+                const by = Math.floor(item.mesh.position.y - 0.125);
+                const bz = Math.floor(item.mesh.position.z);
+
+                // Use world reference to check block
+                const blockBelow = window._world ? window._world.getBlock(bx, by, bz) : 0;
+                const belowData = BlockData[blockBelow];
+                if (belowData && belowData.solid) {
+                    item.mesh.position.y = by + 1 + 0.25;
+                    item.vy = 0;
+                    item.grounded = true;
+                }
+
+                // Despawn if falls below world
+                if (item.mesh.position.y < -10) {
+                    this.scene.remove(item.mesh);
+                    item.mesh.geometry.dispose();
+                    item.mesh.material.dispose();
+                    this.items.splice(i, 1);
+                    continue;
+                }
+            } else {
+                // Check if block below was removed → fall again
+                const bx = Math.floor(item.mesh.position.x);
+                const by = Math.floor(item.mesh.position.y - 0.3);
+                const bz = Math.floor(item.mesh.position.z);
+                const blockBelow = window._world ? window._world.getBlock(bx, by, bz) : 0;
+                const belowData = BlockData[blockBelow];
+                if (!belowData || !belowData.solid) {
+                    item.grounded = false;
+                    item.vy = 0;
+                }
+                // Gentle bob when grounded
+                item.mesh.position.y += Math.sin(item.time * 2.5) * 0.002;
+            }
+
+            // INSTANT pickup when within range — no slow attraction
             const dx = playerPos.x - item.mesh.position.x;
             const dy = playerPos.y - item.mesh.position.y;
             const dz = playerPos.z - item.mesh.position.z;
             const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
-            if (dist < 2.0 && !item.collected) {
-                // Suck toward player
-                const speed = Math.max(8, 12 / dist);
-                item.mesh.position.x += (dx / dist) * speed * dt;
-                item.mesh.position.y += (dy / dist) * speed * dt;
-                item.mesh.position.z += (dz / dist) * speed * dt;
-
-                if (dist < 0.8) {
-                    // Collect
-                    item.collected = true;
-                    inventory.addItem(item.type, 1);
-                    this.scene.remove(item.mesh);
-                    item.mesh.geometry.dispose();
-                    item.mesh.material.dispose();
-                    this.items.splice(i, 1);
-                }
+            if (dist < 2.5 && !item.collected && item.time > 0.3) {
+                // Instant collect — zap!
+                item.collected = true;
+                inventory.addItem(item.type, 1);
+                this.scene.remove(item.mesh);
+                item.mesh.geometry.dispose();
+                item.mesh.material.dispose();
+                this.items.splice(i, 1);
             }
         }
     }

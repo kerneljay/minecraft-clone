@@ -205,9 +205,9 @@ export function createTextureAtlas() {
 
     // ===== GRASS BLOCK with user's exact colors =====
     const gt = FACE_TEXTURES[BlockType.GRASS];
-    // 5 grass greens: #546D33, #405327, #4A602D, #485E2C, #5C7839
+    // 5 grass greens — darker, more saturated
     const grassPalette = [
-        [84, 109, 51], [64, 83, 39], [74, 96, 45], [72, 94, 44], [92, 120, 57],
+        [64, 89, 38], [48, 68, 28], [58, 78, 33], [55, 76, 32], [72, 100, 42],
     ];
     // 4 dirt browns: darkest→lightest (all lightened)
     const dirtDarkest = [86, 65, 47];   // darkest — only under grass
@@ -256,10 +256,10 @@ export function createTextureAtlas() {
                 return specks[i % 2].slice();
             }
         }
-        // Dirt: darkest only in row 4-5 (right under grass), barely below
+        // Dirt: darkest in rows right after grass (1-2), barely below
         const h = Math.abs(Math.sin(x * 127.1 + y * 311.7 + 32 * 43758.5453) * 43758.5453);
         const r = h - Math.floor(h);
-        const darkChance = (y >= 4 && y <= 5) ? 0.50 : 0.04;
+        const darkChance = (y >= 1 && y <= 2) ? 0.60 : 0.03;
         if (r < darkChance) return dirtDarkest.slice();
         const bi = Math.floor((r - darkChance) / ((1 - darkChance) / 3)) % 3;
         return dirtBrowns[Math.min(bi, 2)].slice();

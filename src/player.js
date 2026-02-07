@@ -465,6 +465,19 @@ export class Player {
 
         const data = BlockData[block];
         const hardness = data ? data.hardness : 1.0;
+
+        // Instant break for hardness 0 (plants, flowers, tall grass)
+        if (hardness === 0) {
+            world.setBlock(x, y, z, BlockType.AIR);
+            // Drop: use block data's drop (AIR = no drop, e.g. tall grass)
+            const dropType = data && data.drop !== undefined ? data.drop : block;
+            if (dropType !== BlockType.AIR && window._droppedItems) {
+                window._droppedItems.spawnDrop(x, y, z, dropType);
+            }
+            this.cancelMining();
+            return;
+        }
+
         // Break time scales with hardness (minimum 0.2s for instant-feel blocks)
         const breakTime = Math.max(0.2, hardness * 1.5);
 
@@ -484,10 +497,10 @@ export class Player {
                 else { this.cancelMining(); return; }
             }
 
-            // Spawn floating drop instead of direct inventory add
-            if (window._droppedItems) {
+            // Spawn floating drop (skip if AIR)
+            if (dropType !== BlockType.AIR && window._droppedItems) {
                 window._droppedItems.spawnDrop(x, y, z, dropType);
-            } else {
+            } else if (dropType !== BlockType.AIR) {
                 inventory.addItem(dropType, 1); // Fallback
             }
             this.cancelMining();
