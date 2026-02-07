@@ -198,17 +198,17 @@ export class Chunk {
                         const hash = Math.abs(Math.sin(wx * 12.9898 + wz * 78.233) * 43758.5453) % 1;
                         const hash2 = Math.abs(Math.sin(wx * 63.7264 + wz * 10.873) * 28573.2938) % 1;
 
-                        // Tall grass: ~15% chance (plains), ~20% chance (forest), ~10% (savanna)
-                        const grassChance = biome === 'forest' ? 0.20 : (biome === 'savanna' ? 0.10 : 0.15);
+                        // Tall grass: sparse — ~3% plains, ~5% forest, ~2% savanna
+                        const grassChance = biome === 'forest' ? 0.05 : (biome === 'savanna' ? 0.02 : 0.03);
                         if (hash < grassChance) {
                             this.blocks[this.getIndex(lx, height + 1, lz)] = BlockType.TALL_GRASS;
                         }
-                        // Red flower: ~1% chance
-                        else if (hash > 0.98 && hash2 > 0.5) {
+                        // Red flower: ~0.3% chance
+                        else if (hash > 0.996 && hash2 > 0.5) {
                             this.blocks[this.getIndex(lx, height + 1, lz)] = BlockType.FLOWER_RED;
                         }
-                        // Yellow flower: ~1% chance
-                        else if (hash > 0.96 && hash < 0.98 && hash2 > 0.6) {
+                        // Yellow flower: ~0.2% chance
+                        else if (hash > 0.994 && hash < 0.996 && hash2 > 0.5) {
                             this.blocks[this.getIndex(lx, height + 1, lz)] = BlockType.FLOWER_YELLOW;
                         }
                     }

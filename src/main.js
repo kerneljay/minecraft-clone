@@ -343,45 +343,76 @@ let crackMesh = null;
 let crackTextures = [];
 
 function initMiningCrack() {
-    // Create crack stage textures (10 stages like Minecraft)
+    // Create crack stage textures (8 stages, progressive from center outward)
     const stages = 8;
+    const size = 64; // Higher res for better cracks
+
     for (let s = 0; s < stages; s++) {
         const canvas = document.createElement('canvas');
-        canvas.width = 32;
-        canvas.height = 32;
+        canvas.width = size;
+        canvas.height = size;
         const ctx = canvas.getContext('2d');
 
         // Transparent base
-        ctx.clearRect(0, 0, 32, 32);
+        ctx.clearRect(0, 0, size, size);
 
-        // Draw crack lines that get progressively denser
         const progress = (s + 1) / stages;
-        ctx.strokeStyle = `rgba(0, 0, 0, ${0.3 + progress * 0.5})`;
-        ctx.lineWidth = 1 + progress;
 
-        // Random-looking but deterministic crack pattern per stage
-        const seed = s * 7;
-        const numCracks = 2 + Math.floor(progress * 8);
-        for (let c = 0; c < numCracks; c++) {
+        // Darken the entire face progressively
+        ctx.fillStyle = `rgba(0, 0, 0, ${progress * 0.3})`;
+        ctx.fillRect(0, 0, size, size);
+
+        // Draw cracks that grow from center outward
+        ctx.strokeStyle = `rgba(0, 0, 0, ${0.5 + progress * 0.5})`;
+        ctx.lineWidth = 1 + progress * 1.5;
+
+        // Center of the face
+        const cx = size / 2;
+        const cy = size / 2;
+
+        // Number of crack branches grows with stage
+        const numBranches = Math.ceil(2 + s * 1.5);
+        // How far cracks extend (as fraction of half-size)
+        const reach = 0.2 + progress * 0.8;
+        const maxDist = reach * (size / 2);
+
+        for (let b = 0; b < numBranches; b++) {
+            // Deterministic angle for this branch
+            const angle = (b / numBranches) * Math.PI * 2 + (b * 1.37);
+
             ctx.beginPath();
-            const sx = ((seed + c * 13) % 28) + 2;
-            const sy = ((seed + c * 17) % 28) + 2;
-            ctx.moveTo(sx, sy);
-            const segments = 2 + Math.floor(progress * 3);
+            ctx.moveTo(cx, cy);
+
+            // Each branch has several segments with slight zigzag
+            const segments = 3 + Math.floor(progress * 4);
+            let px = cx, py = cy;
             for (let seg = 0; seg < segments; seg++) {
-                const nx = sx + ((c * 7 + seg * 11 + seed) % 26) - 13;
-                const ny = sy + ((c * 13 + seg * 7 + seed) % 26) - 13;
-                ctx.lineTo(
-                    Math.max(0, Math.min(32, nx)),
-                    Math.max(0, Math.min(32, ny))
-                );
+                const segProgress = (seg + 1) / segments;
+                const dist = segProgress * maxDist;
+                // Main direction + zigzag offset
+                const zigzag = ((b * 7 + seg * 13) % 11 - 5) * 3 * progress;
+                const nx = cx + Math.cos(angle) * dist + Math.sin(angle) * zigzag;
+                const ny = cy + Math.sin(angle) * dist - Math.cos(angle) * zigzag;
+                const clampedX = Math.max(1, Math.min(size - 1, nx));
+                const clampedY = Math.max(1, Math.min(size - 1, ny));
+                ctx.lineTo(clampedX, clampedY);
+                px = clampedX;
+                py = clampedY;
+
+                // Sub-branches in later stages
+                if (s >= 4 && seg > 0 && seg % 2 === 0) {
+                    const subAngle = angle + ((b + seg) % 2 === 0 ? 0.7 : -0.7);
+                    const subDist = maxDist * 0.3;
+                    ctx.moveTo(clampedX, clampedY);
+                    ctx.lineTo(
+                        Math.max(1, Math.min(size - 1, clampedX + Math.cos(subAngle) * subDist)),
+                        Math.max(1, Math.min(size - 1, clampedY + Math.sin(subAngle) * subDist))
+                    );
+                    ctx.moveTo(clampedX, clampedY);
+                }
             }
             ctx.stroke();
         }
-
-        // Darken overall as progress increases
-        ctx.fillStyle = `rgba(0, 0, 0, ${progress * 0.35})`;
-        ctx.fillRect(0, 0, 32, 32);
 
         const tex = new THREE.CanvasTexture(canvas);
         tex.magFilter = THREE.NearestFilter;

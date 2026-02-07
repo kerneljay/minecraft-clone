@@ -46,6 +46,11 @@ export class DayNightCycle {
         const moonMat = new THREE.MeshBasicMaterial({ color: 0xccccdd });
         this.moonMesh = new THREE.Mesh(moonGeo, moonMat);
         scene.add(this.moonMesh);
+
+        // ===== MINECRAFT-STYLE CLOUDS =====
+        this.cloudOffset = 0;
+        this.clouds = this.createClouds();
+        scene.add(this.clouds);
     }
 
     createStars() {
@@ -64,6 +69,67 @@ export class DayNightCycle {
         starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starVerts, 3));
         const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 1.5, sizeAttenuation: false });
         return new THREE.Points(starGeo, starMat);
+    }
+
+    createClouds() {
+        // Minecraft-style flat blocky clouds — large canvas texture on a plane
+        const cloudSize = 512; // texture resolution
+        const canvas = document.createElement('canvas');
+        canvas.width = cloudSize;
+        canvas.height = cloudSize;
+        const ctx = canvas.getContext('2d');
+
+        // Clear to fully transparent
+        ctx.clearRect(0, 0, cloudSize, cloudSize);
+
+        // Generate blocky cloud patches using simple noise
+        const blockScale = 8; // each "cloud pixel" is 8x8 on the canvas
+        const gridSize = cloudSize / blockScale;
+
+        // Simple hash-based noise for cloud shapes
+        for (let gx = 0; gx < gridSize; gx++) {
+            for (let gz = 0; gz < gridSize; gz++) {
+                // Multi-octave hash noise for natural cloud shapes
+                const nx = gx / gridSize;
+                const nz = gz / gridSize;
+                const n1 = Math.abs(Math.sin(nx * 6.2831 * 3 + nz * 4.1234) * Math.cos(nz * 6.2831 * 2 + nx * 3.7891));
+                const n2 = Math.abs(Math.sin(nx * 6.2831 * 7 + 1.234) * Math.cos(nz * 6.2831 * 5 + 2.567)) * 0.5;
+                const noise = n1 + n2;
+
+                // Only draw cloud where noise is above threshold
+                if (noise > 0.65) {
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+                    ctx.fillRect(gx * blockScale, gz * blockScale, blockScale, blockScale);
+                } else if (noise > 0.55) {
+                    // Softer edges
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+                    ctx.fillRect(gx * blockScale, gz * blockScale, blockScale, blockScale);
+                }
+            }
+        }
+
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        texture.repeat.set(3, 3); // Tile the cloud pattern
+        texture.magFilter = THREE.NearestFilter; // Blocky Minecraft look
+        texture.minFilter = THREE.NearestFilter;
+
+        const cloudGeo = new THREE.PlaneGeometry(800, 800);
+        const cloudMat = new THREE.MeshBasicMaterial({
+            map: texture,
+            transparent: true,
+            opacity: 0.85,
+            side: THREE.DoubleSide,
+            depthWrite: false,
+        });
+
+        const cloudMesh = new THREE.Mesh(cloudGeo, cloudMat);
+        cloudMesh.rotation.x = -Math.PI / 2; // Flat horizontal
+        cloudMesh.position.y = 128; // High up like Minecraft
+        cloudMesh.renderOrder = 1;
+
+        return cloudMesh;
     }
 
     update(dt, playerPos) {
@@ -127,6 +193,21 @@ export class DayNightCycle {
         // Sun/moon visibility
         this.sunMesh.visible = dayFactor > 0.1;
         this.moonMesh.visible = dayFactor < 0.5;
+
+        // ===== CLOUD UPDATE =====
+        if (this.clouds) {
+            // Clouds follow player horizontally
+            this.clouds.position.x = playerPos.x;
+            this.clouds.position.z = playerPos.z;
+
+            // Slow drift eastward via texture offset
+            this.cloudOffset += dt * 0.003;
+            this.clouds.material.map.offset.x = this.cloudOffset;
+
+            // Slightly dimmer at night
+            this.clouds.material.opacity = 0.3 + dayFactor * 0.6;
+            this.clouds.visible = true;
+        }
     }
 
     isNight() {

@@ -524,14 +524,14 @@ export function createTextureAtlas() {
         return [0, 0, 0, 0];
     });
 
-    // Tall Grass
+    // Tall Grass — thin wispy blades, mostly transparent
     fillTile(ctx, FACE_TEXTURES[BlockType.TALL_GRASS].all, (x, y) => {
-        // Multiple grass blades with slight variation
-        const blades = [[3, 4], [5, 3], [7, 2], [9, 3], [11, 4], [6, 5], [10, 5]];
+        // Thin grass blades (1px wide each), mostly air
+        const blades = [[3, 6], [5, 4], [7, 3], [9, 5], [11, 6], [6, 7], [10, 4], [8, 5], [4, 8]];
         for (const [bx, minY] of blades) {
-            if (x >= bx && x <= bx + 1 && y >= minY && y <= 15) {
-                const shade = 70 + Math.floor(txNoise(x, y, 77) * 40);
-                return [shade - 30, shade + 50, shade - 40, 200];
+            if (x === bx && y >= minY && y <= 15) {
+                const shade = 60 + Math.floor(txNoise(x, y, 77) * 50);
+                return [shade - 20, shade + 60, shade - 30, 160];
             }
         }
         return [0, 0, 0, 0];
