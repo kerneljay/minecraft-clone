@@ -256,10 +256,10 @@ export function createTextureAtlas() {
                 return specks[i % 2].slice();
             }
         }
-        // Dirt: darkest in rows right after grass (1-2), barely below
+        // Dirt: darkest in rows right after grass (1-4), barely below
         const h = Math.abs(Math.sin(x * 127.1 + y * 311.7 + 32 * 43758.5453) * 43758.5453);
         const r = h - Math.floor(h);
-        const darkChance = (y >= 1 && y <= 2) ? 0.60 : 0.03;
+        const darkChance = (y >= 1 && y <= 4) ? 0.65 : 0.03;
         if (r < darkChance) return dirtDarkest.slice();
         const bi = Math.floor((r - darkChance) / ((1 - darkChance) / 3)) % 3;
         return dirtBrowns[Math.min(bi, 2)].slice();
