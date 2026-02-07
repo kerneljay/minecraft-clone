@@ -366,13 +366,13 @@ export class Player {
             this.mineSwingAngle *= 0.8; // Quickly return
         }
 
-        // Update right arm position
+        // Update right arm position — arm points FORWARD (not up)
         if (this.rightArm.parent) {
             const swing = Math.sin(this.armSwing) * 0.5;
             const mineSwing = Math.sin(this.mineSwingAngle) * 0.45;
             const totalSwing = swing + mineSwing;
-            this.rightArm.position.set(0.38, -0.5 - totalSwing * 0.1, -0.45 + totalSwing * 0.2);
-            this.rightArm.rotation.x = -totalSwing;
+            this.rightArm.position.set(0.35, -0.35 - totalSwing * 0.08, -0.55 + totalSwing * 0.15);
+            this.rightArm.rotation.x = -1.2 - totalSwing * 0.5; // Base angle forward (~70°)
             this.rightArm.rotation.z = -0.1;
         }
     }

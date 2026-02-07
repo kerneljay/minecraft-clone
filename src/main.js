@@ -343,55 +343,25 @@ let crackMesh = null;
 let crackTextures = [];
 
 function initMiningCrack() {
-    // Procedurally generated random cracks (H/V only, additive stages)
-    const stages = 8;
+    // Clean crack animation — 5 stages, bigger strokes, well spread out
+    const stages = 5;
     const size = 64;
 
-    // Seeded random for reproducible crack patterns
-    let seed = 4827391;
-    function rand() {
-        seed = (seed * 16807 + 0) % 2147483647;
-        return (seed & 0x7fffffff) / 2147483647;
-    }
+    // Hand-tuned crack lines that spread across the face naturally
+    // Each stage adds a few bold lines (additive)
+    const stageCracks = [
+        // Stage 1: small initial crack near center
+        [[28, 32, 40, 32], [32, 26, 32, 38]],
+        // Stage 2: branch out a bit
+        [[18, 28, 28, 28], [40, 36, 50, 36], [32, 38, 32, 50]],
+        // Stage 3: spread to corners
+        [[8, 18, 22, 18], [42, 14, 56, 14], [18, 28, 18, 44], [50, 36, 50, 52]],
+        // Stage 4: more coverage
+        [[8, 48, 24, 48], [44, 50, 58, 50], [8, 18, 8, 36], [56, 14, 56, 34]],
+        // Stage 5: final breaks reaching edges
+        [[4, 8, 20, 8], [46, 56, 60, 56], [4, 48, 4, 58], [60, 8, 60, 28], [24, 58, 44, 58]],
+    ];
 
-    // Generate random crack segments procedurally
-    // Start from center area, branch outward with random H/V segments
-    const allCracks = [];
-    const startPoints = [[32, 32]]; // Start from center
-
-    for (let i = 0; i < 40; i++) {
-        // Pick a random existing point to branch from
-        const base = startPoints[Math.floor(rand() * startPoints.length)];
-        const isHorizontal = rand() > 0.5;
-        const length = 4 + Math.floor(rand() * 14);
-        const dir = rand() > 0.5 ? 1 : -1;
-
-        let x1, y1, x2, y2;
-        if (isHorizontal) {
-            x1 = base[0];
-            y1 = base[1] + Math.floor((rand() - 0.5) * 6);
-            x2 = Math.max(2, Math.min(62, x1 + dir * length));
-            y2 = y1;
-        } else {
-            x1 = base[0] + Math.floor((rand() - 0.5) * 6);
-            y1 = base[1];
-            x2 = x1;
-            y2 = Math.max(2, Math.min(62, y1 + dir * length));
-        }
-
-        allCracks.push([x1, y1, x2, y2]);
-        // Add endpoint as new potential branch point
-        startPoints.push([x2, y2]);
-        // Occasionally add a midpoint too
-        if (rand() > 0.6) {
-            startPoints.push([Math.floor((x1 + x2) / 2), Math.floor((y1 + y2) / 2)]);
-        }
-    }
-
-    // Distribute cracks across stages (additive)
-    const stageLineCounts = [3, 7, 12, 17, 22, 28, 34, 40];
-
-    // Build cumulative canvases
     let cumulativeCanvas = null;
 
     for (let s = 0; s < stages; s++) {
@@ -404,16 +374,12 @@ function initMiningCrack() {
             ctx.drawImage(cumulativeCanvas, 0, 0);
         }
 
-        // NO darkening — only show crack lines
-        const prevCount = s > 0 ? stageLineCounts[s - 1] : 0;
-        const currCount = Math.min(stageLineCounts[s], allCracks.length);
-
-        ctx.strokeStyle = `rgba(0, 0, 0, 0.85)`;
-        ctx.lineWidth = 2;
+        // Bold black crack lines — no darkening
+        ctx.strokeStyle = `rgba(0, 0, 0, 0.9)`;
+        ctx.lineWidth = 3;
         ctx.lineCap = 'square';
 
-        for (let i = prevCount; i < currCount; i++) {
-            const [x1, y1, x2, y2] = allCracks[i];
+        for (const [x1, y1, x2, y2] of stageCracks[s]) {
             ctx.beginPath();
             ctx.moveTo(x1, y1);
             ctx.lineTo(x2, y2);
