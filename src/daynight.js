@@ -72,36 +72,57 @@ export class DayNightCycle {
     }
 
     createClouds() {
-        // Minecraft-style flat blocky clouds — large canvas texture on a plane
-        const cloudSize = 512; // texture resolution
+        // Minecraft-style flat blocky clouds with proper scattered randomness
+        const cloudSize = 512;
         const canvas = document.createElement('canvas');
         canvas.width = cloudSize;
         canvas.height = cloudSize;
         const ctx = canvas.getContext('2d');
-
-        // Clear to fully transparent
         ctx.clearRect(0, 0, cloudSize, cloudSize);
 
-        // Generate blocky cloud patches using simple noise
-        const blockScale = 8; // each "cloud pixel" is 8x8 on the canvas
+        const blockScale = 8; // each cloud "pixel" is 8x8
         const gridSize = cloudSize / blockScale;
 
-        // Simple hash-based noise for cloud shapes
+        // Seeded pseudo-random (mulberry32)
+        let seed = 91827364;
+        function rand() {
+            seed = (seed + 0x6D2B79F5) | 0;
+            let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+            t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+            return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        }
+
+        // Generate cloud blobs: random cluster centers + fill around them
+        const numClusters = 12 + Math.floor(rand() * 8);
+        const clusters = [];
+        for (let c = 0; c < numClusters; c++) {
+            clusters.push({
+                cx: Math.floor(rand() * gridSize),
+                cz: Math.floor(rand() * gridSize),
+                radius: 3 + Math.floor(rand() * 8),
+                density: 0.3 + rand() * 0.5,
+            });
+        }
+
         for (let gx = 0; gx < gridSize; gx++) {
             for (let gz = 0; gz < gridSize; gz++) {
-                // Multi-octave hash noise for natural cloud shapes
-                const nx = gx / gridSize;
-                const nz = gz / gridSize;
-                const n1 = Math.abs(Math.sin(nx * 6.2831 * 3 + nz * 4.1234) * Math.cos(nz * 6.2831 * 2 + nx * 3.7891));
-                const n2 = Math.abs(Math.sin(nx * 6.2831 * 7 + 1.234) * Math.cos(nz * 6.2831 * 5 + 2.567)) * 0.5;
-                const noise = n1 + n2;
+                let cloudVal = 0;
+                for (const cl of clusters) {
+                    const dx = gx - cl.cx;
+                    const dz = gz - cl.cz;
+                    const dist = Math.sqrt(dx * dx + dz * dz);
+                    if (dist < cl.radius) {
+                        const falloff = 1 - (dist / cl.radius);
+                        cloudVal += falloff * cl.density;
+                    }
+                }
+                // Add some per-pixel jitter
+                cloudVal += (rand() - 0.5) * 0.15;
 
-                // Only draw cloud where noise is above threshold
-                if (noise > 0.65) {
-                    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+                if (cloudVal > 0.35) {
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
                     ctx.fillRect(gx * blockScale, gz * blockScale, blockScale, blockScale);
-                } else if (noise > 0.55) {
-                    // Softer edges
+                } else if (cloudVal > 0.2) {
                     ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
                     ctx.fillRect(gx * blockScale, gz * blockScale, blockScale, blockScale);
                 }
@@ -111,8 +132,8 @@ export class DayNightCycle {
         const texture = new THREE.CanvasTexture(canvas);
         texture.wrapS = THREE.RepeatWrapping;
         texture.wrapT = THREE.RepeatWrapping;
-        texture.repeat.set(3, 3); // Tile the cloud pattern
-        texture.magFilter = THREE.NearestFilter; // Blocky Minecraft look
+        texture.repeat.set(2, 2);
+        texture.magFilter = THREE.NearestFilter;
         texture.minFilter = THREE.NearestFilter;
 
         const cloudGeo = new THREE.PlaneGeometry(800, 800);
@@ -125,8 +146,8 @@ export class DayNightCycle {
         });
 
         const cloudMesh = new THREE.Mesh(cloudGeo, cloudMat);
-        cloudMesh.rotation.x = -Math.PI / 2; // Flat horizontal
-        cloudMesh.position.y = 128; // High up like Minecraft
+        cloudMesh.rotation.x = -Math.PI / 2;
+        cloudMesh.position.y = 128;
         cloudMesh.renderOrder = 1;
 
         return cloudMesh;

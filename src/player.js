@@ -93,21 +93,28 @@ export class Player {
     }
 
     createRightArm() {
-        // Slim MC-style arm — clean, long, minimal
+        // Minecraft-style first-person arm — clean, wide, skin-colored
         const armGroup = new THREE.Group();
 
-        // Arm (skin-colored, slim and long)
-        const armGeo = new THREE.BoxGeometry(0.12, 0.85, 0.12);
+        // Forearm (wider, flatter MC-style)
+        const armGeo = new THREE.BoxGeometry(0.24, 0.65, 0.24);
         const armMat = new THREE.MeshLambertMaterial({ color: 0xd4a574 }); // Skin tone
         const arm = new THREE.Mesh(armGeo, armMat);
-        arm.position.set(0, -0.2, 0);
+        arm.position.set(0, -0.15, 0);
         armGroup.add(arm);
 
-        // Small sleeve cuff
-        const sleeveGeo = new THREE.BoxGeometry(0.14, 0.12, 0.14);
-        const sleeveMat = new THREE.MeshLambertMaterial({ color: 0x4a7a4a });
+        // Fist at the bottom (slightly wider than arm)
+        const fistGeo = new THREE.BoxGeometry(0.28, 0.2, 0.28);
+        const fistMat = new THREE.MeshLambertMaterial({ color: 0xc89860 }); // Slightly darker skin
+        const fist = new THREE.Mesh(fistGeo, fistMat);
+        fist.position.set(0, -0.55, 0);
+        armGroup.add(fist);
+
+        // Shirt sleeve cuff (dark gray, not green!)
+        const sleeveGeo = new THREE.BoxGeometry(0.26, 0.08, 0.26);
+        const sleeveMat = new THREE.MeshLambertMaterial({ color: 0x555555 });
         const sleeve = new THREE.Mesh(sleeveGeo, sleeveMat);
-        sleeve.position.set(0, 0.35, 0);
+        sleeve.position.set(0, 0.28, 0);
         armGroup.add(sleeve);
 
         return armGroup;
@@ -305,13 +312,13 @@ export class Player {
     updateHunger(dt) {
         if (this.creative || this.peaceful) return;
 
-        // Drain hunger over time or with sprint
+        // Drain hunger over time or with sprint — realistic MC pacing
         this.hungerTimer += dt;
-        const drainRate = this.isSprinting ? 0.5 : 1.2;
+        const drainRate = this.isSprinting ? 8 : 25;
         if (this.hungerTimer > drainRate) {
             this.hungerTimer = 0;
             if (this.hunger > 0) {
-                this.hunger = Math.max(0, this.hunger - 0.5);
+                this.hunger = Math.max(0, this.hunger - 0.25);
             }
         }
 

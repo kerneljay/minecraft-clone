@@ -181,13 +181,54 @@ export class UI {
         if (!this.healthBar) return;
         this.healthBar.innerHTML = '';
         for (let i = 0; i < 10; i++) {
-            const heart = document.createElement('span');
-            heart.className = 'heart';
             const hp = player.health - i * 2;
-            if (hp >= 2) heart.textContent = '❤';
-            else if (hp >= 1) { heart.textContent = '💔'; heart.style.opacity = '0.7'; }
-            else { heart.textContent = '🖤'; heart.style.opacity = '0.3'; }
-            this.healthBar.appendChild(heart);
+            const canvas = document.createElement('canvas');
+            canvas.width = 18;
+            canvas.height = 18;
+            canvas.style.cssText = 'width:18px;height:18px;image-rendering:pixelated;display:inline-block;margin:0 1px;';
+            const ctx = canvas.getContext('2d');
+
+            // Draw MC-style heart
+            if (hp >= 2) {
+                // Full heart — bright red
+                ctx.fillStyle = '#c00';
+                ctx.fillRect(2, 4, 4, 2); ctx.fillRect(12, 4, 4, 2); // top bumps
+                ctx.fillRect(0, 6, 18, 4); // middle
+                ctx.fillRect(2, 10, 14, 2);
+                ctx.fillRect(4, 12, 10, 2);
+                ctx.fillRect(6, 14, 6, 2);
+                ctx.fillRect(8, 16, 2, 2);
+                // Highlight
+                ctx.fillStyle = '#f44';
+                ctx.fillRect(4, 6, 2, 2); ctx.fillRect(14, 6, 2, 2);
+            } else if (hp >= 1) {
+                // Half heart — left half red, right half dark
+                ctx.fillStyle = '#c00';
+                ctx.fillRect(2, 4, 4, 2);
+                ctx.fillRect(0, 6, 9, 4);
+                ctx.fillRect(2, 10, 7, 2);
+                ctx.fillRect(4, 12, 5, 2);
+                ctx.fillRect(6, 14, 3, 2);
+                ctx.fillRect(8, 16, 1, 2);
+                // Empty half outline
+                ctx.fillStyle = '#440000';
+                ctx.fillRect(12, 4, 4, 2);
+                ctx.fillRect(9, 6, 9, 4);
+                ctx.fillRect(9, 10, 7, 2);
+                ctx.fillRect(9, 12, 5, 2);
+                ctx.fillRect(9, 14, 3, 2);
+                ctx.fillRect(9, 16, 1, 2);
+            } else {
+                // Empty heart — dark outline
+                ctx.fillStyle = '#440000';
+                ctx.fillRect(2, 4, 4, 2); ctx.fillRect(12, 4, 4, 2);
+                ctx.fillRect(0, 6, 18, 4);
+                ctx.fillRect(2, 10, 14, 2);
+                ctx.fillRect(4, 12, 10, 2);
+                ctx.fillRect(6, 14, 6, 2);
+                ctx.fillRect(8, 16, 2, 2);
+            }
+            this.healthBar.appendChild(canvas);
         }
     }
 
@@ -195,13 +236,48 @@ export class UI {
         if (!this.hungerBar) return;
         this.hungerBar.innerHTML = '';
         for (let i = 0; i < 10; i++) {
-            const food = document.createElement('span');
-            food.className = 'hunger';
             const h = player.hunger - i * 2;
-            if (h >= 2) food.textContent = '🍖';
-            else if (h >= 1) { food.textContent = '🍖'; food.style.opacity = '0.5'; }
-            else { food.textContent = '🍖'; food.style.opacity = '0.15'; }
-            this.hungerBar.appendChild(food);
+            const canvas = document.createElement('canvas');
+            canvas.width = 18;
+            canvas.height = 18;
+            canvas.style.cssText = 'width:18px;height:18px;image-rendering:pixelated;display:inline-block;margin:0 1px;';
+            const ctx = canvas.getContext('2d');
+
+            // Draw MC-style drumstick
+            if (h >= 2) {
+                // Full drumstick — brown/tan
+                ctx.fillStyle = '#c8841e';
+                ctx.fillRect(4, 4, 8, 6); // meat body
+                ctx.fillRect(6, 2, 4, 2); // top
+                ctx.fillRect(6, 10, 4, 2); // bottom
+                ctx.fillStyle = '#e8a420';
+                ctx.fillRect(6, 5, 4, 4); // highlight
+                // Bone
+                ctx.fillStyle = '#eee';
+                ctx.fillRect(12, 6, 4, 2); // stick
+                ctx.fillRect(16, 4, 2, 2); // bone knob top
+                ctx.fillRect(16, 8, 2, 2); // bone knob bottom
+            } else if (h >= 1) {
+                // Half drumstick — faded
+                ctx.fillStyle = '#8a5a12';
+                ctx.fillRect(4, 4, 8, 6);
+                ctx.fillRect(6, 2, 4, 2);
+                ctx.fillRect(6, 10, 4, 2);
+                ctx.fillStyle = '#eee';
+                ctx.fillRect(12, 6, 4, 2);
+                ctx.fillRect(16, 4, 2, 2);
+                ctx.fillRect(16, 8, 2, 2);
+            } else {
+                // Empty hunger — dark outline
+                ctx.fillStyle = '#332200';
+                ctx.fillRect(4, 4, 8, 6);
+                ctx.fillRect(6, 2, 4, 2);
+                ctx.fillRect(6, 10, 4, 2);
+                ctx.fillRect(12, 6, 4, 2);
+                ctx.fillRect(16, 4, 2, 2);
+                ctx.fillRect(16, 8, 2, 2);
+            }
+            this.hungerBar.appendChild(canvas);
         }
     }
 

@@ -343,76 +343,106 @@ let crackMesh = null;
 let crackTextures = [];
 
 function initMiningCrack() {
-    // Create crack stage textures (8 stages, progressive from center outward)
+    // GRID-BASED mining cracks: only horizontal/vertical lines
+    // Each stage adds MORE lines on top of the previous stage (additive)
     const stages = 8;
-    const size = 64; // Higher res for better cracks
+    const size = 64;
+
+    // Pre-define all crack line segments [x1,y1,x2,y2]
+    // These are the total set of cracks — each stage reveals more of them
+    // Lines are all perfectly horizontal or vertical
+    const allCracks = [
+        // Stage 1: tiny center cross
+        [30, 32, 34, 32],  // short horizontal center
+        [32, 30, 32, 34],  // short vertical center
+
+        // Stage 2: extend center cracks
+        [25, 32, 39, 32],  // longer horizontal
+        [32, 25, 32, 39],  // longer vertical
+
+        // Stage 3: first branches (H/V only)
+        [25, 32, 25, 22],  // branch up-left
+        [39, 32, 39, 42],  // branch down-right
+        [32, 25, 22, 25],  // branch left from top
+        [32, 39, 42, 39],  // branch right from bottom
+
+        // Stage 4: more branches + new cracks from edges
+        [10, 20, 25, 20],  // top-left horizontal
+        [39, 44, 52, 44],  // bottom-right horizontal
+        [22, 25, 22, 10],  // extend up-left vertical
+        [42, 39, 42, 52],  // extend down-right vertical
+
+        // Stage 5: dense cross-hatching starts
+        [15, 30, 15, 45],  // left side vertical
+        [48, 15, 48, 35],  // right side vertical
+        [10, 20, 10, 30],  // far left vertical
+        [10, 45, 30, 45],  // bottom horizontal
+
+        // Stage 6: spreading further
+        [5, 12, 22, 12],   // top horizontal
+        [40, 50, 58, 50],  // bottom-right horizontal
+        [48, 35, 58, 35],  // mid-right horizontal
+        [5, 45, 5, 55],    // far left lower vertical
+
+        // Stage 7: near full coverage
+        [5, 55, 20, 55],   // bottom left horizontal
+        [35, 8, 55, 8],    // top right horizontal
+        [55, 8, 55, 25],   // right edge vertical
+        [5, 12, 5, 30],    // left edge vertical
+
+        // Stage 8: final cracks
+        [20, 55, 20, 62],  // bottom drip
+        [55, 25, 60, 25],  // right extension
+        [3, 3, 15, 3],     // top-left corner
+        [50, 58, 62, 58],  // bottom-right corner
+        [3, 3, 3, 12],     // top-left vertical
+        [60, 50, 60, 62],  // right-side vertical
+    ];
+
+    // Assign crack lines to stages (additive: earlier stages include fewer lines)
+    const stageLineCounts = [2, 4, 8, 12, 16, 20, 24, 30];
+
+    // Build cumulative canvases — each stage draws on top of previous
+    let cumulativeCanvas = null;
+    let cumulativeCtx = null;
 
     for (let s = 0; s < stages; s++) {
+        // Create fresh canvas for each stage by copying the previous
         const canvas = document.createElement('canvas');
         canvas.width = size;
         canvas.height = size;
         const ctx = canvas.getContext('2d');
 
-        // Transparent base
-        ctx.clearRect(0, 0, size, size);
+        // Copy cumulative state from previous stage
+        if (cumulativeCanvas) {
+            ctx.drawImage(cumulativeCanvas, 0, 0);
+        }
 
         const progress = (s + 1) / stages;
 
-        // Darken the entire face progressively
-        ctx.fillStyle = `rgba(0, 0, 0, ${progress * 0.3})`;
+        // Darken the face progressively
+        ctx.fillStyle = `rgba(0, 0, 0, ${progress * 0.25})`;
         ctx.fillRect(0, 0, size, size);
 
-        // Draw cracks that grow from center outward
-        ctx.strokeStyle = `rgba(0, 0, 0, ${0.5 + progress * 0.5})`;
-        ctx.lineWidth = 1 + progress * 1.5;
+        // Draw new lines for this stage
+        const prevCount = s > 0 ? stageLineCounts[s - 1] : 0;
+        const currCount = Math.min(stageLineCounts[s], allCracks.length);
 
-        // Center of the face
-        const cx = size / 2;
-        const cy = size / 2;
+        ctx.strokeStyle = `rgba(0, 0, 0, ${0.6 + progress * 0.4})`;
+        ctx.lineWidth = 1 + progress;
+        ctx.lineCap = 'square';
 
-        // Number of crack branches grows with stage
-        const numBranches = Math.ceil(2 + s * 1.5);
-        // How far cracks extend (as fraction of half-size)
-        const reach = 0.2 + progress * 0.8;
-        const maxDist = reach * (size / 2);
-
-        for (let b = 0; b < numBranches; b++) {
-            // Deterministic angle for this branch
-            const angle = (b / numBranches) * Math.PI * 2 + (b * 1.37);
-
+        for (let i = prevCount; i < currCount; i++) {
+            const [x1, y1, x2, y2] = allCracks[i];
             ctx.beginPath();
-            ctx.moveTo(cx, cy);
-
-            // Each branch has several segments with slight zigzag
-            const segments = 3 + Math.floor(progress * 4);
-            let px = cx, py = cy;
-            for (let seg = 0; seg < segments; seg++) {
-                const segProgress = (seg + 1) / segments;
-                const dist = segProgress * maxDist;
-                // Main direction + zigzag offset
-                const zigzag = ((b * 7 + seg * 13) % 11 - 5) * 3 * progress;
-                const nx = cx + Math.cos(angle) * dist + Math.sin(angle) * zigzag;
-                const ny = cy + Math.sin(angle) * dist - Math.cos(angle) * zigzag;
-                const clampedX = Math.max(1, Math.min(size - 1, nx));
-                const clampedY = Math.max(1, Math.min(size - 1, ny));
-                ctx.lineTo(clampedX, clampedY);
-                px = clampedX;
-                py = clampedY;
-
-                // Sub-branches in later stages
-                if (s >= 4 && seg > 0 && seg % 2 === 0) {
-                    const subAngle = angle + ((b + seg) % 2 === 0 ? 0.7 : -0.7);
-                    const subDist = maxDist * 0.3;
-                    ctx.moveTo(clampedX, clampedY);
-                    ctx.lineTo(
-                        Math.max(1, Math.min(size - 1, clampedX + Math.cos(subAngle) * subDist)),
-                        Math.max(1, Math.min(size - 1, clampedY + Math.sin(subAngle) * subDist))
-                    );
-                    ctx.moveTo(clampedX, clampedY);
-                }
-            }
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
             ctx.stroke();
         }
+
+        // Save this as cumulative for next stage
+        cumulativeCanvas = canvas;
+        cumulativeCtx = ctx;
 
         const tex = new THREE.CanvasTexture(canvas);
         tex.magFilter = THREE.NearestFilter;
