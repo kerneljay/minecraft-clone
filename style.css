@@ -110,14 +110,15 @@ body {
   pointer-events: none;
 }
 
-/* Status bars */
+/* Status bars — aligned precisely above hotbar */
 #status-bars {
   display: flex;
   justify-content: space-between;
   align-items: flex-end;
   width: 364px;
-  margin-bottom: 4px;
-  padding: 0 2px;
+  margin-bottom: 2px;
+  padding: 0 4px;
+  overflow: hidden;
 }
 
 #health-bar {
@@ -125,21 +126,25 @@ body {
   align-items: center;
   gap: 0;
   height: 18px;
+  max-width: 50%;
+  overflow: hidden;
 }
 
 #hunger-bar {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 0;
   height: 18px;
-  direction: rtl;
-  /* Fills from right-to-left like MC */
+  max-width: 50%;
+  overflow: hidden;
 }
 
 .heart,
 .hunger {
   font-size: 12px;
   text-shadow: 1px 1px 0 #000;
+  flex-shrink: 0;
 }
 
 /* XP Bar */

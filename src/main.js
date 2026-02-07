@@ -64,7 +64,7 @@ function startGame(mode) {
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x87CEEB);
     const fogDist = gameRenderDist * 16;
-    scene.fog = new THREE.Fog(0x87CEEB, fogDist * 0.6, fogDist * 1.2);
+    scene.fog = new THREE.Fog(0x87CEEB, fogDist * 0.75, fogDist * 1.4);
 
     camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 500);
 
@@ -343,88 +343,71 @@ let crackMesh = null;
 let crackTextures = [];
 
 function initMiningCrack() {
-    // GRID-BASED mining cracks: only horizontal/vertical lines
-    // Each stage adds MORE lines on top of the previous stage (additive)
+    // Procedurally generated random cracks (H/V only, additive stages)
     const stages = 8;
     const size = 64;
 
-    // Pre-define all crack line segments [x1,y1,x2,y2]
-    // These are the total set of cracks — each stage reveals more of them
-    // Lines are all perfectly horizontal or vertical
-    const allCracks = [
-        // Stage 1: tiny center cross
-        [30, 32, 34, 32],  // short horizontal center
-        [32, 30, 32, 34],  // short vertical center
+    // Seeded random for reproducible crack patterns
+    let seed = 4827391;
+    function rand() {
+        seed = (seed * 16807 + 0) % 2147483647;
+        return (seed & 0x7fffffff) / 2147483647;
+    }
 
-        // Stage 2: extend center cracks
-        [25, 32, 39, 32],  // longer horizontal
-        [32, 25, 32, 39],  // longer vertical
+    // Generate random crack segments procedurally
+    // Start from center area, branch outward with random H/V segments
+    const allCracks = [];
+    const startPoints = [[32, 32]]; // Start from center
 
-        // Stage 3: first branches (H/V only)
-        [25, 32, 25, 22],  // branch up-left
-        [39, 32, 39, 42],  // branch down-right
-        [32, 25, 22, 25],  // branch left from top
-        [32, 39, 42, 39],  // branch right from bottom
+    for (let i = 0; i < 40; i++) {
+        // Pick a random existing point to branch from
+        const base = startPoints[Math.floor(rand() * startPoints.length)];
+        const isHorizontal = rand() > 0.5;
+        const length = 4 + Math.floor(rand() * 14);
+        const dir = rand() > 0.5 ? 1 : -1;
 
-        // Stage 4: more branches + new cracks from edges
-        [10, 20, 25, 20],  // top-left horizontal
-        [39, 44, 52, 44],  // bottom-right horizontal
-        [22, 25, 22, 10],  // extend up-left vertical
-        [42, 39, 42, 52],  // extend down-right vertical
+        let x1, y1, x2, y2;
+        if (isHorizontal) {
+            x1 = base[0];
+            y1 = base[1] + Math.floor((rand() - 0.5) * 6);
+            x2 = Math.max(2, Math.min(62, x1 + dir * length));
+            y2 = y1;
+        } else {
+            x1 = base[0] + Math.floor((rand() - 0.5) * 6);
+            y1 = base[1];
+            x2 = x1;
+            y2 = Math.max(2, Math.min(62, y1 + dir * length));
+        }
 
-        // Stage 5: dense cross-hatching starts
-        [15, 30, 15, 45],  // left side vertical
-        [48, 15, 48, 35],  // right side vertical
-        [10, 20, 10, 30],  // far left vertical
-        [10, 45, 30, 45],  // bottom horizontal
+        allCracks.push([x1, y1, x2, y2]);
+        // Add endpoint as new potential branch point
+        startPoints.push([x2, y2]);
+        // Occasionally add a midpoint too
+        if (rand() > 0.6) {
+            startPoints.push([Math.floor((x1 + x2) / 2), Math.floor((y1 + y2) / 2)]);
+        }
+    }
 
-        // Stage 6: spreading further
-        [5, 12, 22, 12],   // top horizontal
-        [40, 50, 58, 50],  // bottom-right horizontal
-        [48, 35, 58, 35],  // mid-right horizontal
-        [5, 45, 5, 55],    // far left lower vertical
+    // Distribute cracks across stages (additive)
+    const stageLineCounts = [3, 7, 12, 17, 22, 28, 34, 40];
 
-        // Stage 7: near full coverage
-        [5, 55, 20, 55],   // bottom left horizontal
-        [35, 8, 55, 8],    // top right horizontal
-        [55, 8, 55, 25],   // right edge vertical
-        [5, 12, 5, 30],    // left edge vertical
-
-        // Stage 8: final cracks
-        [20, 55, 20, 62],  // bottom drip
-        [55, 25, 60, 25],  // right extension
-        [3, 3, 15, 3],     // top-left corner
-        [50, 58, 62, 58],  // bottom-right corner
-        [3, 3, 3, 12],     // top-left vertical
-        [60, 50, 60, 62],  // right-side vertical
-    ];
-
-    // Assign crack lines to stages (additive: earlier stages include fewer lines)
-    const stageLineCounts = [2, 4, 8, 12, 16, 20, 24, 30];
-
-    // Build cumulative canvases — each stage draws on top of previous
+    // Build cumulative canvases
     let cumulativeCanvas = null;
-    let cumulativeCtx = null;
 
     for (let s = 0; s < stages; s++) {
-        // Create fresh canvas for each stage by copying the previous
         const canvas = document.createElement('canvas');
         canvas.width = size;
         canvas.height = size;
         const ctx = canvas.getContext('2d');
 
-        // Copy cumulative state from previous stage
         if (cumulativeCanvas) {
             ctx.drawImage(cumulativeCanvas, 0, 0);
         }
 
-        // NO darkening — blocks keep original color, only show cracks!
-
-        // Draw new lines for this stage
+        // NO darkening — only show crack lines
         const prevCount = s > 0 ? stageLineCounts[s - 1] : 0;
         const currCount = Math.min(stageLineCounts[s], allCracks.length);
 
-        // Thick, bold black crack lines
         ctx.strokeStyle = `rgba(0, 0, 0, 0.85)`;
         ctx.lineWidth = 2;
         ctx.lineCap = 'square';
@@ -437,9 +420,7 @@ function initMiningCrack() {
             ctx.stroke();
         }
 
-        // Save this as cumulative for next stage
         cumulativeCanvas = canvas;
-        cumulativeCtx = ctx;
 
         const tex = new THREE.CanvasTexture(canvas);
         tex.magFilter = THREE.NearestFilter;
