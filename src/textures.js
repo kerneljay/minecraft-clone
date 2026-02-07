@@ -203,82 +203,76 @@ export function createTextureAtlas() {
         return palette[Math.min(idx, palette.length - 1)].slice();
     }
 
-    // ===== PIXEL-PERFECT GRASS BLOCK from exact texture data =====
+    // ===== GRASS BLOCK with user's exact colors =====
     const gt = FACE_TEXTURES[BlockType.GRASS];
-    // Color lookup: 0=#79C05A, 1=#599044, 2=#8BB971, 3=#4E7A39
-    const G = [[121, 192, 90], [89, 144, 68], [139, 185, 113], [78, 122, 57]];
-    // Dirt lookup: 0=#866043, 1=#9B7653, 2=#593D29, 3=#433222
-    const D = [[134, 96, 67], [155, 118, 83], [89, 61, 41], [67, 50, 34]];
-
-    // ----- GRASS TOP (exact pixel map) -----
-    const grassTopMap = [
-        [0, 2, 1, 3, 2, 0, 3, 3, 0, 3, 2, 3, 3, 1, 0, 0],
-        [0, 3, 1, 0, 1, 3, 1, 3, 2, 1, 3, 0, 0, 0, 1, 0],
-        [1, 2, 2, 0, 0, 0, 0, 3, 2, 2, 3, 1, 1, 0, 2, 0],
-        [2, 2, 1, 0, 0, 2, 3, 2, 3, 0, 3, 3, 0, 2, 1, 0],
-        [1, 2, 0, 3, 3, 0, 1, 0, 0, 0, 1, 0, 2, 0, 3, 2],
-        [3, 2, 3, 0, 0, 0, 1, 3, 1, 3, 2, 3, 2, 3, 2, 0],
-        [1, 1, 1, 0, 1, 2, 1, 2, 1, 1, 3, 3, 1, 0, 3, 0],
-        [0, 0, 0, 0, 2, 2, 1, 1, 3, 3, 1, 1, 0, 0, 1, 0],
-        [3, 1, 3, 3, 0, 0, 1, 3, 0, 2, 2, 2, 1, 1, 1, 1],
-        [1, 0, 0, 2, 3, 2, 0, 3, 2, 1, 2, 1, 0, 1, 3, 1],
-        [2, 3, 2, 3, 3, 2, 3, 3, 3, 0, 1, 1, 0, 0, 0, 1],
-        [1, 1, 0, 2, 1, 3, 3, 3, 2, 0, 2, 3, 3, 2, 3, 1],
-        [0, 2, 2, 2, 2, 0, 3, 3, 2, 2, 1, 1, 3, 1, 2, 2],
-        [3, 1, 2, 0, 1, 2, 1, 1, 1, 1, 1, 1, 2, 3, 3, 1],
-        [2, 0, 2, 1, 0, 3, 2, 2, 0, 1, 3, 0, 3, 3, 3, 3],
-        [0, 0, 3, 3, 0, 2, 0, 1, 3, 0, 3, 3, 1, 1, 2, 0],
+    // 5 grass greens: #546D33, #405327, #4A602D, #485E2C, #5C7839
+    const grassPalette = [
+        [84, 109, 51], [64, 83, 39], [74, 96, 45], [72, 94, 44], [92, 120, 57],
     ];
-    fillTile(ctx, gt.top, (x, y) => G[grassTopMap[y][x]].slice());
-
-    // ----- DIRT BOTTOM (exact pixel map) -----
-    const dirtBottomMap = [
-        [0, 0, 2, 1, 1, 1, 0, 0, 3, 0, 0, 0, 1, 1, 0, 1],
-        [3, 1, 3, 2, 0, 1, 3, 2, 2, 1, 1, 2, 0, 0, 3, 0],
-        [2, 2, 2, 0, 3, 0, 3, 0, 2, 2, 1, 0, 0, 1, 2, 0],
-        [1, 0, 3, 2, 3, 2, 1, 2, 2, 1, 2, 0, 1, 1, 1, 3],
-        [3, 2, 1, 2, 0, 1, 0, 2, 3, 2, 0, 1, 2, 1, 3, 3],
-        [3, 1, 2, 1, 1, 2, 3, 3, 2, 1, 1, 3, 0, 0, 0, 1],
-        [1, 3, 0, 3, 3, 3, 2, 0, 0, 2, 2, 0, 2, 3, 1, 3],
-        [0, 2, 1, 0, 2, 1, 1, 2, 1, 0, 2, 3, 0, 0, 2, 2],
-        [1, 0, 1, 0, 0, 3, 0, 1, 1, 3, 1, 2, 3, 1, 1, 2],
-        [3, 2, 3, 3, 0, 1, 1, 0, 2, 0, 1, 1, 0, 0, 0, 1],
-        [0, 0, 2, 0, 1, 2, 3, 1, 1, 3, 1, 3, 3, 1, 0, 0],
-        [3, 2, 3, 3, 3, 0, 0, 0, 3, 2, 0, 1, 1, 1, 3, 1],
-        [3, 1, 2, 3, 1, 0, 3, 0, 0, 0, 0, 1, 1, 3, 3, 3],
-        [1, 3, 0, 1, 3, 0, 3, 2, 3, 2, 3, 3, 1, 1, 2, 1],
-        [0, 0, 2, 0, 0, 3, 1, 0, 0, 1, 0, 0, 1, 3, 0, 1],
-        [0, 0, 3, 2, 2, 1, 2, 1, 2, 3, 1, 2, 3, 2, 0, 0],
+    // 4 dirt browns: darkest→lightest
+    const dirtDarkest = [66, 45, 31];   // #422D1F — near grass layer
+    const dirtBrowns = [
+        [90, 63, 43], [112, 80, 55], [138, 99, 69],  // #5A3F2B, #705037, #8A6345
     ];
-    fillTile(ctx, gt.bottom, (x, y) => D[dirtBottomMap[y][x]].slice());
+    // Stone specks: #505050, #656565 — exactly 6 per side
+    const specks = [[80, 80, 80], [101, 101, 101]];
 
-    // ----- GRASS SIDE (exact pixel map) -----
-    // 0-3 = G[0]-G[3] (grass), 4-7 = D[0]-D[3] (dirt)
-    const grassSideMap = [
-        [3, 0, 1, 3, 1, 2, 0, 1, 0, 0, 0, 1, 2, 3, 3, 2],
-        [2, 0, 2, 2, 1, 0, 0, 0, 2, 2, 0, 2, 0, 2, 3, 0],
-        [3, 3, 1, 1, 1, 2, 1, 0, 0, 3, 0, 2, 2, 3, 3, 1],
-        [1, 3, 3, 2, 0, 2, 1, 0, 1, 0, 2, 2, 1, 3, 0, 2],
-        [5, 0, 0, 3, 5, 0, 2, 0, 4, 5, 1, 0, 6, 2, 3, 7],
-        [7, 7, 6, 5, 0, 3, 3, 5, 6, 5, 0, 3, 3, 5, 2, 2],
-        [6, 7, 5, 4, 4, 7, 7, 7, 7, 5, 5, 5, 5, 4, 6, 6],
-        [4, 5, 5, 5, 5, 4, 4, 4, 4, 7, 4, 6, 7, 5, 6, 5],
-        [4, 6, 6, 6, 4, 4, 5, 4, 5, 4, 5, 4, 5, 4, 5, 7],
-        [6, 7, 6, 5, 6, 5, 6, 6, 7, 5, 5, 7, 5, 6, 7, 7],
-        [7, 6, 6, 7, 7, 7, 7, 7, 4, 6, 5, 6, 5, 7, 5, 6],
-        [4, 6, 5, 7, 7, 6, 4, 6, 7, 4, 4, 5, 6, 4, 5, 5],
-        [6, 6, 7, 7, 4, 4, 6, 5, 5, 6, 4, 6, 5, 4, 7, 4],
-        [4, 6, 7, 4, 5, 7, 6, 4, 5, 4, 6, 4, 4, 4, 4, 6],
-        [7, 4, 6, 7, 5, 7, 4, 4, 4, 7, 4, 4, 4, 5, 7, 4],
-        [7, 7, 5, 4, 7, 4, 5, 5, 4, 6, 6, 6, 5, 6, 4, 7],
-    ];
-    fillTile(ctx, gt.side, (x, y) => {
-        const v = grassSideMap[y][x];
-        return v < 4 ? G[v].slice() : D[v - 4].slice();
+    // ----- GRASS TOP -----
+    fillTile(ctx, gt.top, (x, y) => pickColor(grassPalette, x, y, 10));
+
+    // ----- DIRT BOTTOM (no specks on bottom) -----
+    fillTile(ctx, gt.bottom, (x, y) => {
+        const h = Math.abs(Math.sin(x * 127.1 + y * 311.7 + 20 * 43758.5453) * 43758.5453);
+        const r = h - Math.floor(h);
+        // Darkest brown ~15%
+        if (r < 0.15) return dirtDarkest.slice();
+        // 3 browns equally ~28.3% each
+        const bi = Math.floor((r - 0.15) / 0.2833) % 3;
+        return dirtBrowns[Math.min(bi, 2)].slice();
     });
 
-    // ----- DIRT (uses same bottom pattern) -----
-    fillTile(ctx, FACE_TEXTURES[BlockType.DIRT].all, (x, y) => D[dirtBottomMap[y][x]].slice());
+    // ----- GRASS SIDE (grass overhang + dirt + 6 specks) -----
+    // Pre-pick 6 speck positions deterministically
+    const speckPositions = [];
+    for (let i = 0; i < 6; i++) {
+        const sh = Math.abs(Math.sin((i + 1) * 7919.0) * 43758.5453);
+        const sx = Math.floor((sh - Math.floor(sh)) * 16);
+        const sh2 = Math.abs(Math.sin((i + 1) * 1301.0) * 43758.5453);
+        const sy = 4 + Math.floor((sh2 - Math.floor(sh2)) * 12); // rows 4-15 only
+        speckPositions.push([sx, sy]);
+    }
+    fillTile(ctx, gt.side, (x, y) => {
+        // Row 0: always grass
+        if (y === 0) return pickColor(grassPalette, x, y, 30);
+        // Rows 1-3: ragged grass overhang
+        if (y <= 3) {
+            const n = txNoise(x, y, 31);
+            const threshold = y === 1 ? 0.25 : y === 2 ? 0.55 : 0.78;
+            if (n > threshold) return pickColor(grassPalette, x, y, 30);
+        }
+        // Check if this pixel is a speck
+        for (let i = 0; i < 6; i++) {
+            if (speckPositions[i][0] === x && speckPositions[i][1] === y) {
+                return specks[i % 2].slice();
+            }
+        }
+        // Dirt distribution: darkest near grass (rows 1-5), 3 browns equal below
+        const h = Math.abs(Math.sin(x * 127.1 + y * 311.7 + 32 * 43758.5453) * 43758.5453);
+        const r = h - Math.floor(h);
+        const darkChance = y <= 5 ? 0.35 : 0.08;
+        if (r < darkChance) return dirtDarkest.slice();
+        const bi = Math.floor((r - darkChance) / ((1 - darkChance) / 3)) % 3;
+        return dirtBrowns[Math.min(bi, 2)].slice();
+    });
+
+    // ----- DIRT (no specks, just browns) -----
+    fillTile(ctx, FACE_TEXTURES[BlockType.DIRT].all, (x, y) => {
+        const h = Math.abs(Math.sin(x * 127.1 + y * 311.7 + 40 * 43758.5453) * 43758.5453);
+        const r = h - Math.floor(h);
+        if (r < 0.15) return dirtDarkest.slice();
+        const bi = Math.floor((r - 0.15) / 0.2833) % 3;
+        return dirtBrowns[Math.min(bi, 2)].slice();
+    });
 
     // ----- STONE ----- (varied grays with dramatic darker patches)
     const stonePalette = [
