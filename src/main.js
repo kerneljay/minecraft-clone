@@ -343,23 +343,24 @@ let crackMesh = null;
 let crackTextures = [];
 
 function initMiningCrack() {
-    // Clean crack animation — 5 stages, bigger strokes, well spread out
+    // Connected crack animation — 5 stages, lines always connect to each other
+    // Each stage extends from previous endpoints, forming a growing crack network
     const stages = 5;
     const size = 64;
 
-    // Hand-tuned crack lines that spread across the face naturally
-    // Each stage adds a few bold lines (additive)
+    // All lines connect: endpoint of one becomes startpoint of next
+    // Format: [x1,y1, x2,y2] — each stage's lines start from previous stage's endpoints
     const stageCracks = [
-        // Stage 1: small initial crack near center
-        [[28, 32, 40, 32], [32, 26, 32, 38]],
-        // Stage 2: branch out a bit
-        [[18, 28, 28, 28], [40, 36, 50, 36], [32, 38, 32, 50]],
-        // Stage 3: spread to corners
-        [[8, 18, 22, 18], [42, 14, 56, 14], [18, 28, 18, 44], [50, 36, 50, 52]],
-        // Stage 4: more coverage
-        [[8, 48, 24, 48], [44, 50, 58, 50], [8, 18, 8, 36], [56, 14, 56, 34]],
-        // Stage 5: final breaks reaching edges
-        [[4, 8, 20, 8], [46, 56, 60, 56], [4, 48, 4, 58], [60, 8, 60, 28], [24, 58, 44, 58]],
+        // Stage 1: small cross at center
+        [[32, 32, 24, 32], [32, 32, 32, 24], [32, 32, 40, 32], [32, 32, 32, 40]],
+        // Stage 2: extend from those 4 endpoints
+        [[24, 32, 16, 24], [32, 24, 40, 16], [40, 32, 48, 40], [32, 40, 24, 48]],
+        // Stage 3: branch further from stage 2 tips
+        [[16, 24, 8, 24], [16, 24, 16, 12], [40, 16, 52, 10], [48, 40, 56, 40], [48, 40, 48, 52], [24, 48, 24, 58]],
+        // Stage 4: spread to edges
+        [[8, 24, 4, 36], [52, 10, 60, 10], [56, 40, 56, 54], [24, 58, 40, 58], [16, 12, 8, 6]],
+        // Stage 5: final reaches to corners
+        [[4, 36, 4, 50], [60, 10, 60, 24], [56, 54, 48, 60], [40, 58, 56, 58], [8, 6, 4, 6], [8, 6, 8, 4]],
     ];
 
     let cumulativeCanvas = null;
@@ -374,7 +375,7 @@ function initMiningCrack() {
             ctx.drawImage(cumulativeCanvas, 0, 0);
         }
 
-        // Bold black crack lines — no darkening
+        // Bold black connected crack lines
         ctx.strokeStyle = `rgba(0, 0, 0, 0.9)`;
         ctx.lineWidth = 3;
         ctx.lineCap = 'square';

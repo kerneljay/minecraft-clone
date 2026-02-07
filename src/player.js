@@ -93,21 +93,21 @@ export class Player {
     }
 
     createRightArm() {
-        // Slim Minecraft first-person arm — long and thin, not cube-like
+        // Slim Minecraft first-person arm — shorter (2/3), thin
         const armGroup = new THREE.Group();
 
-        // Long slim forearm (3x longer, much thinner)
-        const armGeo = new THREE.BoxGeometry(0.12, 1.8, 0.10);
-        const armMat = new THREE.MeshLambertMaterial({ color: 0xd4a574 }); // Skin tone
+        // Slim forearm (2/3 of previous length)
+        const armGeo = new THREE.BoxGeometry(0.12, 1.2, 0.10);
+        const armMat = new THREE.MeshLambertMaterial({ color: 0xd4a574 });
         const arm = new THREE.Mesh(armGeo, armMat);
-        arm.position.set(0, -0.5, 0);
+        arm.position.set(0, -0.3, 0);
         armGroup.add(arm);
 
-        // Small fist at the bottom (only slightly wider)
+        // Small fist at the bottom
         const fistGeo = new THREE.BoxGeometry(0.15, 0.14, 0.14);
         const fistMat = new THREE.MeshLambertMaterial({ color: 0xc89860 });
         const fist = new THREE.Mesh(fistGeo, fistMat);
-        fist.position.set(0, -1.45, 0);
+        fist.position.set(0, -0.95, 0);
         armGroup.add(fist);
 
         return armGroup;
