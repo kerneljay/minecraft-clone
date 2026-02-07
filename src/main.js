@@ -530,23 +530,49 @@ let crackMesh = null;
 let crackTextures = [];
 
 function initMiningCrack() {
-    // Connected crack animation — 5 stages, lines always connect to each other
-    // Each stage extends from previous endpoints, forming a growing crack network
+    // Minecraft-style destroy stages: scattered cracks across the face
+    // Each stage adds more lines, making the block look increasingly damaged
     const stages = 5;
     const size = 64;
 
-    // All cracks are strictly horizontal or vertical — no diagonals
+    // Scattered cracks — NOT from center, just random segments across the face
+    // Each line is [x1, y1, x2, y2] — all horizontal or vertical
     const stageCracks = [
-        // Stage 1: small cross from center
-        [[32, 24, 32, 40], [24, 32, 40, 32]],
-        // Stage 2: extend from endpoints
-        [[32, 24, 32, 12], [32, 40, 32, 52], [24, 32, 12, 32], [40, 32, 52, 32]],
-        // Stage 3: branch with right angles
-        [[32, 12, 20, 12], [52, 32, 52, 20], [12, 32, 12, 44], [32, 52, 44, 52]],
-        // Stage 4: spread to edges
-        [[20, 12, 20, 4], [52, 20, 60, 20], [12, 44, 4, 44], [44, 52, 44, 60]],
-        // Stage 5: fill remaining
-        [[20, 4, 8, 4], [60, 20, 60, 8], [4, 44, 4, 56], [44, 60, 56, 60], [8, 4, 8, 12]],
+        // Stage 1: a few small scattered cracks
+        [
+            [10, 18, 28, 18],  // horizontal top-left area
+            [40, 44, 40, 58],  // vertical bottom-right area
+        ],
+        // Stage 2: more cracks appearing in different areas
+        [
+            [36, 10, 56, 10],  // horizontal top-right
+            [8, 38, 8, 54],    // vertical left side
+            [44, 30, 58, 30],  // horizontal mid-right
+        ],
+        // Stage 3: filling in, getting denser
+        [
+            [14, 48, 34, 48],  // horizontal bottom-left
+            [52, 16, 52, 36],  // vertical right side
+            [4, 8, 22, 8],     // horizontal top-left corner
+            [28, 24, 28, 42],  // vertical center-left
+        ],
+        // Stage 4: heavy damage
+        [
+            [16, 32, 40, 32],  // horizontal mid
+            [8, 58, 30, 58],   // horizontal bottom
+            [48, 48, 60, 48],  // horizontal bottom-right
+            [20, 4, 20, 18],   // vertical top
+            [56, 40, 56, 58],  // vertical right-bottom
+        ],
+        // Stage 5: nearly broken — dense cracks everywhere
+        [
+            [4, 24, 18, 24],   // horizontal
+            [32, 56, 54, 56],  // horizontal bottom
+            [36, 4, 36, 20],   // vertical top-center
+            [12, 12, 12, 28],  // vertical left-upper
+            [46, 22, 60, 22],  // horizontal right
+            [24, 40, 24, 56],  // vertical center
+        ],
     ];
 
     let cumulativeCanvas = null;
@@ -561,9 +587,9 @@ function initMiningCrack() {
             ctx.drawImage(cumulativeCanvas, 0, 0);
         }
 
-        // Bold black connected crack lines
-        ctx.strokeStyle = `rgba(0, 0, 0, 0.9)`;
-        ctx.lineWidth = 3;
+        // Dark crack lines
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.85)';
+        ctx.lineWidth = 2;
         ctx.lineCap = 'square';
 
         for (const [x1, y1, x2, y2] of stageCracks[s]) {
