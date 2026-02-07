@@ -209,10 +209,10 @@ export function createTextureAtlas() {
     const grassPalette = [
         [84, 109, 51], [64, 83, 39], [74, 96, 45], [72, 94, 44], [92, 120, 57],
     ];
-    // 4 dirt browns: darkest→lightest
-    const dirtDarkest = [66, 45, 31];   // #422D1F — near grass layer
+    // 4 dirt browns: darkest→lightest (all lightened)
+    const dirtDarkest = [86, 65, 47];   // darkest — only under grass
     const dirtBrowns = [
-        [90, 63, 43], [112, 80, 55], [138, 99, 69],  // #5A3F2B, #705037, #8A6345
+        [115, 88, 65], [140, 108, 80], [165, 128, 96],  // medium, mid-light, light
     ];
     // Stone specks: #505050, #656565 — exactly 6 per side
     const specks = [[80, 80, 80], [101, 101, 101]];
@@ -224,10 +224,10 @@ export function createTextureAtlas() {
     fillTile(ctx, gt.bottom, (x, y) => {
         const h = Math.abs(Math.sin(x * 127.1 + y * 311.7 + 20 * 43758.5453) * 43758.5453);
         const r = h - Math.floor(h);
-        // Darkest brown ~15%
-        if (r < 0.15) return dirtDarkest.slice();
-        // 3 browns equally ~28.3% each
-        const bi = Math.floor((r - 0.15) / 0.2833) % 3;
+        // Darkest brown very rare on bottom (~5%)
+        if (r < 0.05) return dirtDarkest.slice();
+        // 3 browns equally ~31.6% each
+        const bi = Math.floor((r - 0.05) / 0.3166) % 3;
         return dirtBrowns[Math.min(bi, 2)].slice();
     });
 
@@ -256,10 +256,10 @@ export function createTextureAtlas() {
                 return specks[i % 2].slice();
             }
         }
-        // Dirt distribution: darkest near grass (rows 1-5), 3 browns equal below
+        // Dirt: darkest only in row 4-5 (right under grass), barely below
         const h = Math.abs(Math.sin(x * 127.1 + y * 311.7 + 32 * 43758.5453) * 43758.5453);
         const r = h - Math.floor(h);
-        const darkChance = y <= 5 ? 0.35 : 0.08;
+        const darkChance = (y >= 4 && y <= 5) ? 0.50 : 0.04;
         if (r < darkChance) return dirtDarkest.slice();
         const bi = Math.floor((r - darkChance) / ((1 - darkChance) / 3)) % 3;
         return dirtBrowns[Math.min(bi, 2)].slice();
@@ -269,8 +269,8 @@ export function createTextureAtlas() {
     fillTile(ctx, FACE_TEXTURES[BlockType.DIRT].all, (x, y) => {
         const h = Math.abs(Math.sin(x * 127.1 + y * 311.7 + 40 * 43758.5453) * 43758.5453);
         const r = h - Math.floor(h);
-        if (r < 0.15) return dirtDarkest.slice();
-        const bi = Math.floor((r - 0.15) / 0.2833) % 3;
+        if (r < 0.05) return dirtDarkest.slice();
+        const bi = Math.floor((r - 0.05) / 0.3166) % 3;
         return dirtBrowns[Math.min(bi, 2)].slice();
     });
 

@@ -584,19 +584,19 @@ function initMiningCrack() {
             const ctx = canvas.getContext('2d');
             ctx.drawImage(img, 0, 0);
 
-            // Convert to black/dark gray with slight transparency — like real MC
+            // Convert to black/very dark with high opacity — like real MC cracks
             const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
             const data = imageData.data;
             for (let p = 0; p < data.length; p += 4) {
                 if (data[p + 3] > 0) {
-                    // Use original brightness for varied dark tones (0-30)
+                    // Almost pure black (0-10 range)
                     const brightness = (data[p] + data[p + 1] + data[p + 2]) / 3;
-                    const shade = Math.floor((brightness / 255) * 30);
-                    data[p] = shade;       // R — black to very dark gray
+                    const shade = Math.floor((brightness / 255) * 10);
+                    data[p] = shade;       // R — black
                     data[p + 1] = shade;   // G
                     data[p + 2] = shade;   // B
-                    // Slight transparency — mostly opaque black
-                    data[p + 3] = Math.floor(data[p + 3] * 0.75);
+                    // High opacity — nearly opaque black lines
+                    data[p + 3] = Math.floor(data[p + 3] * 0.90);
                 }
             }
             ctx.putImageData(imageData, 0, 0);
