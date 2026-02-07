@@ -353,6 +353,77 @@ body {
   }
 }
 
+/* ===== DEATH SCREEN ===== */
+#death-screen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(120, 0, 0, 0.65);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 3000;
+}
+
+.death-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+}
+
+.death-title {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 48px;
+  color: #c00;
+  text-shadow: 3px 3px 0 #400, -1px -1px 0 #600;
+  animation: deathPulse 2s ease-in-out infinite;
+}
+
+@keyframes deathPulse {
+
+  0%,
+  100% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(1.04);
+  }
+}
+
+.death-score {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 14px;
+  color: #ddd;
+  text-shadow: 1px 1px 0 #000;
+}
+
+#respawn-btn {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 14px;
+  padding: 12px 40px;
+  cursor: pointer;
+}
+
+/* ===== CURSOR ITEM ===== */
+#cursor-item {
+  position: fixed;
+  z-index: 4000;
+  pointer-events: none;
+  width: 32px;
+  height: 32px;
+  image-rendering: pixelated;
+}
+
+#cursor-item canvas {
+  width: 32px;
+  height: 32px;
+  image-rendering: pixelated;
+}
+
 /* ===== HUD ===== */
 #hud {
   position: fixed;

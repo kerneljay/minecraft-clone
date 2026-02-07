@@ -482,7 +482,7 @@ export class Player {
             world.setBlock(x, y, z, BlockType.AIR);
             this.swingArm();
 
-            // Drop item
+            // Drop item as floating entity
             let dropType = block;
             if (block === BlockType.GRASS) dropType = BlockType.DIRT;
             if (block === BlockType.STONE) dropType = BlockType.COBBLESTONE;
@@ -491,7 +491,12 @@ export class Player {
                 else { this.cancelMining(); return; }
             }
 
-            inventory.addItem(dropType, 1);
+            // Spawn floating drop instead of direct inventory add
+            if (window._droppedItems) {
+                window._droppedItems.spawnDrop(x, y, z, dropType);
+            } else {
+                inventory.addItem(dropType, 1); // Fallback
+            }
             this.cancelMining();
         }
     }

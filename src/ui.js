@@ -30,6 +30,19 @@ export class UI {
         this.setupCraftingUI();
 
         this.damageFlashAlpha = 0;
+
+        // Cursor item for inventory drag
+        this._cursorItem = null;
+        this._cursorSlot = -1;
+        this._cursorEl = document.getElementById('cursor-item');
+
+        // Track mouse for cursor item
+        document.addEventListener('mousemove', (e) => {
+            if (this._cursorEl && this._cursorItem) {
+                this._cursorEl.style.left = (e.clientX - 16) + 'px';
+                this._cursorEl.style.top = (e.clientY - 16) + 'px';
+            }
+        });
     }
 
     buildHotbar() {
@@ -332,6 +345,7 @@ export class UI {
             inventory.addItem(this._cursorItem.type, this._cursorItem.count);
             this._cursorItem = null;
             this._cursorSlot = -1;
+            this._updateCursorItemVisual();
         }
 
         // Return items in crafting grid to inventory
@@ -405,25 +419,40 @@ export class UI {
 
     updateCraftCell(cell, blockType) {
         if (blockType && blockType !== 0) {
-            const data = BlockData[blockType];
             cell.style.background = this.getBlockColor(blockType);
-            cell.textContent = data ? data.name.substring(0, 2) : '?';
-            cell.style.color = '#fff';
-            cell.style.fontSize = '7px';
-            cell.style.textShadow = '1px 1px #000';
+            // Draw icon on a small canvas instead of text
+            cell.innerHTML = '';
+            const canvas = document.createElement('canvas');
+            canvas.width = 32;
+            canvas.height = 32;
+            canvas.style.width = '100%';
+            canvas.style.height = '100%';
+            canvas.style.imageRendering = 'pixelated';
+            this.drawItemIcon(canvas, blockType);
+            cell.appendChild(canvas);
         } else {
             cell.style.background = '#8b8b8b';
-            cell.textContent = '';
+            cell.innerHTML = '';
         }
     }
 
     updateInvCell(cell, item) {
         if (item) {
-            const data = BlockData[item.type];
             cell.style.background = this.getBlockColor(item.type);
-            cell.innerHTML = `<span style="font-size:7px;color:#fff;text-shadow:1px 1px #000;">${data ? data.name.substring(0, 2) : '?'}</span>`;
+            cell.innerHTML = '';
+            const canvas = document.createElement('canvas');
+            canvas.width = 32;
+            canvas.height = 32;
+            canvas.style.width = '100%';
+            canvas.style.height = '100%';
+            canvas.style.imageRendering = 'pixelated';
+            this.drawItemIcon(canvas, item.type);
+            cell.appendChild(canvas);
             if (item.count > 1) {
-                cell.innerHTML += `<span style="position:absolute;bottom:1px;right:2px;font-size:6px;color:#fff;text-shadow:1px 1px #000;">${item.count}</span>`;
+                const countEl = document.createElement('span');
+                countEl.style.cssText = 'position:absolute;bottom:1px;right:2px;font-size:6px;color:#fff;text-shadow:1px 1px #000;pointer-events:none;';
+                countEl.textContent = item.count;
+                cell.appendChild(countEl);
             }
         } else {
             cell.innerHTML = '';
@@ -472,8 +501,9 @@ export class UI {
                 }
             } else {
                 // Swap
+                const temp = existing;
                 inventory.slots[index] = { ...this._cursorItem };
-                this._cursorItem = existing;
+                this._cursorItem = { ...temp };
             }
         } else {
             // Pick up item from slot
@@ -484,7 +514,30 @@ export class UI {
                 inventory.slots[index] = null;
             }
         }
+        this._updateCursorItemVisual();
         this.buildCraftingUI(inventory);
+    }
+
+    _updateCursorItemVisual() {
+        if (!this._cursorEl) return;
+        if (this._cursorItem) {
+            this._cursorEl.innerHTML = '';
+            const canvas = document.createElement('canvas');
+            canvas.width = 32;
+            canvas.height = 32;
+            this.drawItemIcon(canvas, this._cursorItem.type);
+            this._cursorEl.appendChild(canvas);
+            if (this._cursorItem.count > 1) {
+                const countEl = document.createElement('span');
+                countEl.style.cssText = 'position:absolute;bottom:0;right:2px;font-size:8px;color:#fff;text-shadow:1px 1px #000;font-family:Press Start 2P,monospace;';
+                countEl.textContent = this._cursorItem.count;
+                this._cursorEl.appendChild(countEl);
+            }
+            this._cursorEl.style.display = 'block';
+        } else {
+            this._cursorEl.style.display = 'none';
+            this._cursorEl.innerHTML = '';
+        }
     }
 
     handleCraftGridClick(index, inventory) {
@@ -521,9 +574,11 @@ export class UI {
             // Add result to inventory
             inventory.addItem(result.type, result.count);
 
-            // Remove one of each ingredient from grid
+            // Remove ONE of each ingredient from grid (not all)
             for (let i = 0; i < grid.length; i++) {
-                if (grid[i] !== 0) grid[i] = 0;
+                if (grid[i] !== 0) {
+                    grid[i] = 0; // Remove ingredient (each cell has 1 item)
+                }
             }
 
             this.updateCraftingResult();

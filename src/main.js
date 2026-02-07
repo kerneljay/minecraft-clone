@@ -201,6 +201,11 @@ async function startGame(mode) {
     // Mobs
     mobs = new MobManager(world, scene);
 
+    // Item drops
+    droppedItems = new DroppedItems(scene);
+    // Expose droppedItems globally so player mining can use it
+    window._droppedItems = droppedItems;
+
     // UI
     ui = new UI();
 
@@ -229,6 +234,9 @@ async function startGame(mode) {
 
     // Find a safe spawn
     spawnPlayer();
+
+    // Respawn button handler
+    document.getElementById('respawn-btn').addEventListener('click', handleRespawn);
 
     // Start pointer lock on click
     renderer.domElement.addEventListener('click', () => {
@@ -394,6 +402,129 @@ function exitPointerLock() {
     player.mouseLocked = false;
 }
 
+// ===== ITEM DROPS =====
+class DroppedItems {
+    constructor(scene) {
+        this.scene = scene;
+        this.items = [];
+    }
+
+    spawnDrop(x, y, z, blockType) {
+        const color = this.getColor(blockType);
+        const geo = new THREE.BoxGeometry(0.25, 0.25, 0.25);
+        const mat = new THREE.MeshLambertMaterial({ color });
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.position.set(x + 0.5, y + 0.3, z + 0.5);
+        mesh.castShadow = true;
+        this.scene.add(mesh);
+
+        this.items.push({
+            mesh,
+            type: blockType,
+            baseY: y + 0.3,
+            time: 0,
+            collected: false,
+        });
+    }
+
+    update(dt, playerPos, inventory) {
+        for (let i = this.items.length - 1; i >= 0; i--) {
+            const item = this.items[i];
+            item.time += dt;
+
+            // Gentle bob and spin
+            item.mesh.position.y = item.baseY + Math.sin(item.time * 2.5) * 0.1;
+            item.mesh.rotation.y += dt * 2;
+
+            // Check pickup distance
+            const dx = playerPos.x - item.mesh.position.x;
+            const dy = playerPos.y - item.mesh.position.y;
+            const dz = playerPos.z - item.mesh.position.z;
+            const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+
+            if (dist < 2.0 && !item.collected) {
+                // Suck toward player
+                const speed = Math.max(8, 12 / dist);
+                item.mesh.position.x += (dx / dist) * speed * dt;
+                item.mesh.position.y += (dy / dist) * speed * dt;
+                item.mesh.position.z += (dz / dist) * speed * dt;
+
+                if (dist < 0.8) {
+                    // Collect
+                    item.collected = true;
+                    inventory.addItem(item.type, 1);
+                    this.scene.remove(item.mesh);
+                    item.mesh.geometry.dispose();
+                    item.mesh.material.dispose();
+                    this.items.splice(i, 1);
+                }
+            }
+        }
+    }
+
+    getColor(type) {
+        const colors = {
+            [BlockType.GRASS]: 0x5F9F35,
+            [BlockType.DIRT]: 0x866049,
+            [BlockType.STONE]: 0x7D7D7D,
+            [BlockType.SAND]: 0xDCD3A0,
+            [BlockType.WOOD]: 0x674E31,
+            [BlockType.LEAVES]: 0x348228,
+            [BlockType.PLANKS]: 0xC29D62,
+            [BlockType.COBBLESTONE]: 0x7A7A7A,
+            [BlockType.COAL_ORE]: 0x333333,
+            [BlockType.IRON_ORE]: 0xC4A88F,
+            [BlockType.GOLD_ORE]: 0xFFD700,
+            [BlockType.DIAMOND_ORE]: 0x22DDDD,
+            [BlockType.GRAVEL]: 0x887E7E,
+            [BlockType.SNOW]: 0xF5F5FF,
+            [BlockType.ICE]: 0x94BCFF,
+            [BlockType.CACTUS]: 0x377826,
+            [BlockType.CLAY]: 0x9EA4B0,
+            [BlockType.GLASS]: 0xC8DCFF,
+            [BlockType.BRICK]: 0x964A36,
+            [BlockType.BOOKSHELF]: 0x8B3A3A,
+            [BlockType.CRAFTING_TABLE]: 0xC29D62,
+            [BlockType.FURNACE]: 0x828282,
+            [BlockType.TNT]: 0xC81E1E,
+        };
+        return colors[type] || 0x888888;
+    }
+}
+
+let droppedItems = null;
+
+// ===== DEATH / RESPAWN =====
+let isDead = false;
+
+function showDeathScreen() {
+    isDead = true;
+    const deathScreen = document.getElementById('death-screen');
+    deathScreen.style.display = 'flex';
+    document.exitPointerLock();
+    player.mouseLocked = false;
+    // Score = number of items in inventory
+    let score = 0;
+    for (const slot of inventory.slots) {
+        if (slot) score += slot.count;
+    }
+    document.getElementById('death-score').textContent = score;
+}
+
+function handleRespawn() {
+    isDead = false;
+    document.getElementById('death-screen').style.display = 'none';
+    player.health = 20;
+    player.hunger = 20;
+    player.saturation = 5;
+    // Clear inventory on death
+    for (let i = 0; i < inventory.slots.length; i++) {
+        inventory.slots[i] = null;
+    }
+    spawnPlayer();
+    lastHealth = 20;
+}
+
 // ===== 3D MINING CRACK ON BLOCK =====
 let crackMesh = null;
 let crackTextures = [];
@@ -404,19 +535,18 @@ function initMiningCrack() {
     const stages = 5;
     const size = 64;
 
-    // All lines connect: endpoint of one becomes startpoint of next
-    // Format: [x1,y1, x2,y2] — each stage's lines start from previous stage's endpoints
+    // All cracks are strictly horizontal or vertical — no diagonals
     const stageCracks = [
-        // Stage 1: small cross at center
-        [[32, 32, 24, 32], [32, 32, 32, 24], [32, 32, 40, 32], [32, 32, 32, 40]],
-        // Stage 2: extend from those 4 endpoints
-        [[24, 32, 16, 24], [32, 24, 40, 16], [40, 32, 48, 40], [32, 40, 24, 48]],
-        // Stage 3: branch further from stage 2 tips
-        [[16, 24, 8, 24], [16, 24, 16, 12], [40, 16, 52, 10], [48, 40, 56, 40], [48, 40, 48, 52], [24, 48, 24, 58]],
+        // Stage 1: small cross from center
+        [[32, 24, 32, 40], [24, 32, 40, 32]],
+        // Stage 2: extend from endpoints
+        [[32, 24, 32, 12], [32, 40, 32, 52], [24, 32, 12, 32], [40, 32, 52, 32]],
+        // Stage 3: branch with right angles
+        [[32, 12, 20, 12], [52, 32, 52, 20], [12, 32, 12, 44], [32, 52, 44, 52]],
         // Stage 4: spread to edges
-        [[8, 24, 4, 36], [52, 10, 60, 10], [56, 40, 56, 54], [24, 58, 40, 58], [16, 12, 8, 6]],
-        // Stage 5: final reaches to corners
-        [[4, 36, 4, 50], [60, 10, 60, 24], [56, 54, 48, 60], [40, 58, 56, 58], [8, 6, 4, 6], [8, 6, 8, 4]],
+        [[20, 12, 20, 4], [52, 20, 60, 20], [12, 44, 4, 44], [44, 52, 44, 60]],
+        // Stage 5: fill remaining
+        [[20, 4, 8, 4], [60, 20, 60, 8], [4, 44, 4, 56], [44, 60, 56, 60], [8, 4, 8, 12]],
     ];
 
     let cumulativeCanvas = null;
@@ -503,6 +633,11 @@ function animate() {
     const dt = Math.min(clock.getDelta(), 0.1);
 
     // Update systems
+    if (isDead) {
+        renderer.render(scene, camera);
+        return;
+    }
+
     player.update(dt, inventory);
 
     // Survival mining: continuous hold-to-break
@@ -512,11 +647,19 @@ function animate() {
     player.updateMining(dt, world, inventory);
     updateMiningCrack();
 
+    // Item drops
+    if (droppedItems) droppedItems.update(dt, player.position, inventory);
+
     world.update(player.position);
     dayNight.update(dt, player.position);
     const mobResult = mobs.update(dt, player.position, dayNight.isNight());
     if (mobResult && mobResult.type === 'damage' && !player.creative) {
         player.health = Math.max(0, player.health - mobResult.amount);
+    }
+
+    // Check death
+    if (player.health <= 0 && !isDead) {
+        showDeathScreen();
     }
 
     // Check for damage flash

@@ -93,6 +93,17 @@
   <!-- Crafting Overlay (dynamically populated by UI) -->
   <div id="crafting-overlay" style="display: none;"></div>
 
+  <!-- Death Screen -->
+  <div id="death-screen" style="display: none;">
+    <div class="death-content">
+      <h1 class="death-title">You Died!</h1>
+      <p class="death-score">Score: <span id="death-score">0</span></p>
+      <button id="respawn-btn" class="mc-btn">Respawn</button>
+    </div>
+  </div>
+
+  <!-- Cursor Item (follows mouse in inventory) -->
+  <div id="cursor-item" style="display: none;"></div>
   <script type="module" src="/src/main.js"></script>
 </body>
 
