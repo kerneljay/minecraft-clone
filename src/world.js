@@ -78,7 +78,7 @@ export class World {
 
         // Pass 1: Generate terrain for new chunks (limit per frame for smoothness)
         let generated = 0;
-        const maxGenerate = forceAll ? 999 : 4;
+        const maxGenerate = forceAll ? 999 : 8;
         for (const [dx, dz] of this._spiralOffsets) {
             const cx = pcx + dx;
             const cz = pcz + dz;
@@ -95,7 +95,7 @@ export class World {
 
         // Pass 2: Decorate chunks whose 4 neighbors all have terrain (so cross-chunk trees work)
         let decorated = 0;
-        const maxDecorate = forceAll ? 999 : 4;
+        const maxDecorate = forceAll ? 999 : 8;
         for (const [key, chunk] of this.chunks) {
             if (chunk.decorated || !chunk.generated) continue;
             if (decorated >= maxDecorate) continue;
@@ -111,7 +111,7 @@ export class World {
 
         // Build/rebuild dirty meshes (limit per frame unless forced)
         let built = 0;
-        const maxBuild = forceAll ? 200 : 4;
+        const maxBuild = forceAll ? 200 : 6;
         for (const [key, chunk] of this.chunks) {
             if (chunk.dirty && chunk.generated && built < maxBuild) {
                 chunk.buildMesh(this.material, this.waterMaterial);

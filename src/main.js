@@ -125,7 +125,7 @@ async function startGame(mode) {
     const fogDist = gameRenderDist * 16;
     scene.fog = new THREE.FogExp2(0x87CEEB, 0.008);
 
-    camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 1200);
+    camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 2400);
 
     renderer = new THREE.WebGLRenderer({
         canvas: document.getElementById('game-canvas'),
@@ -780,7 +780,7 @@ function animate() {
             scene.fog.density = 0.15;
         } else {
             // DayNight cycle sets fog color; we adjust density for render distance
-            scene.fog.density = 1.0 / (world.renderDistance * 16);
+            scene.fog.density = 1.2 / (world.renderDistance * 16);
         }
     }
 

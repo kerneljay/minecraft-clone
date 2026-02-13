@@ -20,7 +20,7 @@ export class Player {
 
         // Movement
         this.speed = 4.317; // Blocks/second (Minecraft sprint ~5.6)
-        this.sprintSpeed = 5.612;
+        this.sprintSpeed = 7.2;
         this.jumpForce = 8.5;
         this.gravity = -28;
         this.isSprinting = false;

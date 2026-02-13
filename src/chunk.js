@@ -54,45 +54,51 @@ export class Chunk {
                 const erosion = noise.fbm2D(wx * 0.008 + 200, wz * 0.008 + 200, 4, 2.0, 0.45);
                 const detail = noise.fbm2D(wx * 0.03 + 500, wz * 0.03 + 500, 3, 2.0, 0.4);
 
-                // Ridged noise for mountain peaks
-                const ridgeRaw = noise.fbm2D(wx * 0.005 + 800, wz * 0.005 + 800, 4, 2.0, 0.5);
-                const ridge = 1.0 - Math.abs(ridgeRaw);
-                const ridgeSq = ridge * ridge; // sharper peaks
+                // Smooth mountain shape — wide rolling peaks, not ridged spikes
+                const mtnShape = noise.fbm2D(wx * 0.003 + 800, wz * 0.003 + 800, 5, 2.0, 0.45);
+                const mtnLift = Math.max(0, mtnShape) * Math.max(0, mtnShape); // smooth quadratic lift
 
-                let height;
+                // Base height (what plains/default terrain would be)
+                const baseHeight = 64 + continentalness * 12 + erosion * 6 + detail * 3;
+
+                let biomeHeight;
                 switch (biome) {
                     case 'desert':
-                        height = 64 + continentalness * 8 + erosion * 3 + detail * 2;
+                        biomeHeight = 64 + continentalness * 6 + erosion * 3 + detail * 1;
                         break;
                     case 'snowy':
-                        height = 66 + continentalness * 20 + erosion * 12 + detail * 3;
+                        biomeHeight = 66 + continentalness * 14 + erosion * 8 + detail * 2;
                         break;
                     case 'forest':
                     case 'birch_forest':
-                        height = 65 + continentalness * 18 + erosion * 8 + detail * 4;
+                        biomeHeight = 65 + continentalness * 14 + erosion * 6 + detail * 3;
                         break;
                     case 'mountains':
-                        // Dramatic peaks up to y=128+
-                        height = 72 + continentalness * 30 + ridgeSq * 45 + erosion * 8 + detail * 3;
+                        // Natural mountains: wide base, gradual slopes, peaks ~y=100-110
+                        biomeHeight = 70 + continentalness * 18 + mtnLift * 28 + erosion * 5 + detail * 2;
                         break;
                     case 'taiga':
-                        height = 66 + continentalness * 22 + erosion * 10 + detail * 3;
+                        biomeHeight = 66 + continentalness * 16 + erosion * 7 + detail * 2;
                         break;
                     case 'swamp':
-                        // Very flat, near sea level
-                        height = 62 + continentalness * 4 + erosion * 2 + detail * 1;
+                        biomeHeight = 62 + continentalness * 3 + erosion * 1.5 + detail * 0.5;
                         break;
                     case 'flower_plains':
-                        // Gently rolling hills
-                        height = 65 + continentalness * 12 + erosion * 6 + detail * 3;
+                        biomeHeight = 65 + continentalness * 8 + erosion * 4 + detail * 2;
                         break;
                     case 'savanna':
-                        height = 66 + continentalness * 14 + erosion * 5 + detail * 2;
+                        biomeHeight = 66 + continentalness * 10 + erosion * 4 + detail * 1.5;
                         break;
                     default: // plains
-                        height = 64 + continentalness * 24 + erosion * 10 + detail * 4;
+                        biomeHeight = baseHeight;
                         break;
                 }
+
+                // ===== BIOME HEIGHT BLENDING =====
+                // Smooth transition: blend biome height toward base height at biome edges
+                // This prevents vertical walls at biome borders
+                const blendFactor = this._getBiomeBlend(noise, wx, wz, biome);
+                let height = baseHeight + (biomeHeight - baseHeight) * blendFactor;
 
                 height = Math.floor(Math.max(1, Math.min(CHUNK_HEIGHT - 10, height)));
 
@@ -123,7 +129,7 @@ export class Chunk {
                             block = BlockType.SAND;
                         } else if (biome === 'snowy' || biome === 'taiga') {
                             block = y === height - 1 ? BlockType.SNOW : BlockType.DIRT;
-                        } else if (biome === 'mountains' && height > 100) {
+                        } else if (biome === 'mountains' && height > 85) {
                             // High mountains: stone faces
                             block = BlockType.STONE;
                         } else if (biome === 'swamp') {
@@ -135,10 +141,10 @@ export class Chunk {
                         // Top block
                         if (biome === 'desert') {
                             block = BlockType.SAND;
-                        } else if (biome === 'mountains' && height > 110) {
+                        } else if (biome === 'mountains' && height > 95) {
                             // Snow-capped peaks
                             block = BlockType.SNOW;
-                        } else if (biome === 'mountains' && height > 95) {
+                        } else if (biome === 'mountains' && height > 82) {
                             // Exposed stone on high slopes
                             block = BlockType.STONE;
                         } else if (biome === 'snowy' || biome === 'taiga') {
@@ -169,10 +175,25 @@ export class Chunk {
         this._terrainDone = true;
     }
 
+    // Biome blending — returns 0..1 indicating how deep into the biome this position is
+    // 0 = at biome edge (blend to base height), 1 = deep inside (full biome height)
+    _getBiomeBlend(noise, wx, wz, biome) {
+        const sampleDist = 16; // check neighbors 16 blocks away
+        const offsets = [
+            [-sampleDist, 0], [sampleDist, 0], [0, -sampleDist], [0, sampleDist],
+        ];
+        let sameCount = 0;
+        for (const [dx, dz] of offsets) {
+            if (this._getBiome(noise, wx + dx, wz + dz) === biome) sameCount++;
+        }
+        const t = sameCount / offsets.length;
+        return t * t * (3 - 2 * t);
+    }
+
     // Shared biome determination — same result in generateTerrain and decorate
     _getBiome(noise, wx, wz) {
-        const temp = noise.fbm2D(wx * 0.001 + 1000, wz * 0.001 + 1000, 3, 2.0, 0.5);
-        const moist = noise.fbm2D(wx * 0.001 + 5000, wz * 0.001 + 5000, 3, 2.0, 0.5);
+        const temp = noise.fbm2D(wx * 0.001 + 1000, wz * 0.001 + 1000, 2, 2.0, 0.5);
+        const moist = noise.fbm2D(wx * 0.001 + 5000, wz * 0.001 + 5000, 2, 2.0, 0.5);
         const variant = noise.fbm2D(wx * 0.0015 + 3000, wz * 0.0015 + 3000, 2, 2.0, 0.5);
 
         if (temp > 0.3 && moist < -0.1) return 'desert';
