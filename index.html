@@ -29,7 +29,7 @@
   <meta name="twitter:title" content="MineClone — Browser Edition" />
   <meta name="twitter:description" content="Mine blocks, craft tools, survive the night — play free in your browser." />
   <meta name="twitter:image" content="https://minecraftopus.vercel.app/og-image.png" />
-  <meta name="twitter:creator" content="@lexnlin" />
+
 
   <link rel="stylesheet" href="/style.css" />
 </head>
@@ -52,11 +52,7 @@
           <img src="/singleplayer.png" alt="Singleplayer" />
         </button>
       </div>
-      <p class="menu-footer">Minecraft Clone · built by <a href="https://x.com/lexnlin" target="_blank" rel="noopener"
-          class="footer-link"><svg class="x-icon" viewBox="0 0 24 24" fill="currentColor">
-            <path
-              d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-          </svg>lexnlin</a></p>
+      <p class="menu-footer">Minecraft Clone</p>
     </div>
 
     <!-- Mode Select (Create New World) -->
@@ -71,12 +67,19 @@
         </div>
 
         <div class="panel-row two-col">
-          <label class="mc-label-block">Render Distance: <span id="rd-label">6</span>
-            <input type="range" id="render-dist" min="2" max="32" value="6" class="mc-slider" />
+          <label class="mc-label-block">Render Distance: <span id="rd-label">10</span>
+            <input type="range" id="render-dist" min="2" max="32" value="10" class="mc-slider" />
           </label>
           <label class="mc-label-inline">
             <input type="checkbox" id="peaceful-cb" class="mc-checkbox" />
             Peaceful Mode
+          </label>
+        </div>
+
+        <div class="panel-row two-col">
+          <label class="mc-label-inline">
+            <input type="checkbox" id="creative-cb" class="mc-checkbox" />
+            Creative Mode
           </label>
         </div>
 
@@ -115,6 +118,9 @@
 
   <!-- Debug Info -->
   <div id="debug-info" style="display: none;"></div>
+
+  <!-- Coordinate Display (toggle with Q) -->
+  <div id="coord-display" style="display: none;"></div>
 
   <!-- Crafting Overlay (dynamically populated by UI) -->
   <div id="crafting-overlay" style="display: none;"></div>

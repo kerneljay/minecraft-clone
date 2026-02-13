@@ -86,6 +86,7 @@ export class UI {
         this.updateHealthBar(player);
         this.updateHungerBar(player);
         this.updateDebugInfo(player, world);
+        this.updateCoordDisplay(player);
         this.updateDamageFlash();
     }
 
@@ -305,6 +306,13 @@ export class UI {
             `Loaded: ${world.chunks.size}`,
             player.creative ? `Mode: Creative${player.flying ? ' (Flying)' : ''}` : `Mode: Survival`,
         ].join('<br>');
+    }
+
+    updateCoordDisplay(player) {
+        const coordDisplay = document.getElementById('coord-display');
+        if (!coordDisplay || coordDisplay.style.display === 'none') return;
+        const pos = player.position;
+        coordDisplay.innerHTML = `X: ${Math.floor(pos.x)} &nbsp; Y: ${Math.floor(pos.y)} &nbsp; Z: ${Math.floor(pos.z)}`;
     }
 
     updateDamageFlash() {

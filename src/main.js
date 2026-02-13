@@ -21,10 +21,10 @@ let renderer, scene, camera;
 let world, player, inventory, dayNight, mobs, ui;
 let clock;
 let isPlaying = false;
-let gameMode = 'survival'; // Only survival for now
+let gameMode = 'survival';
 let lastHealth = 20;
 let gamePeaceful = false;
-let gameRenderDist = 6;
+let gameRenderDist = 10;
 
 // ===== VIDEO BACKGROUND =====
 function initVideoBackground() {
@@ -64,7 +64,11 @@ function init() {
 
     // Title screen buttons
     document.getElementById('play-btn').addEventListener('click', () => showModeSelect());
-    document.getElementById('survival-btn')?.addEventListener('click', () => startGame('survival'));
+    document.getElementById('survival-btn')?.addEventListener('click', () => {
+        const creativeCb = document.getElementById('creative-cb');
+        const mode = (creativeCb && creativeCb.checked) ? 'creative' : 'survival';
+        startGame(mode);
+    });
     document.getElementById('back-btn')?.addEventListener('click', () => showMainMenu());
 
     // Settings controls
@@ -119,9 +123,9 @@ async function startGame(mode) {
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x87CEEB);
     const fogDist = gameRenderDist * 16;
-    scene.fog = new THREE.Fog(0x87CEEB, fogDist * 0.75, fogDist * 1.4);
+    scene.fog = new THREE.FogExp2(0x87CEEB, 0.008);
 
-    camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 500);
+    camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 1200);
 
     renderer = new THREE.WebGLRenderer({
         canvas: document.getElementById('game-canvas'),
@@ -182,9 +186,10 @@ async function startGame(mode) {
     const waterMaterial = new THREE.MeshLambertMaterial({
         map: atlas,
         transparent: true,
-        opacity: 0.92,
+        opacity: 0.7,
         side: THREE.FrontSide,
-        color: 0x1a4a7a,
+        color: 0x2070b0,
+        depthWrite: false,
     });
 
     // Inventory
@@ -412,11 +417,11 @@ function setupGameInput() {
             }
         }
 
-        // Q — drop item
+        // Q — toggle coordinate display
         if (e.code === 'KeyQ') {
-            const held = inventory.getHeldItem();
-            if (held) {
-                inventory.removeFromSlot(inventory.selectedSlot, 1);
+            const coordDisplay = document.getElementById('coord-display');
+            if (coordDisplay) {
+                coordDisplay.style.display = coordDisplay.style.display === 'none' ? 'block' : 'none';
             }
         }
 
@@ -769,16 +774,13 @@ function animate() {
     }
 
     // Update fog & sky to match day/night or underwater
-    const skyColor = scene.background;
     if (scene.fog) {
         if (isUnderwater) {
             scene.fog.color.set(0x0a1e5a);
-            scene.fog.near = 0;
-            scene.fog.far = 8;
+            scene.fog.density = 0.15;
         } else {
-            scene.fog.color.copy(skyColor);
-            scene.fog.near = 1;
-            scene.fog.far = world.renderDistance * 16;
+            // DayNight cycle sets fog color; we adjust density for render distance
+            scene.fog.density = 1.0 / (world.renderDistance * 16);
         }
     }
 

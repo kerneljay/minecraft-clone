@@ -291,20 +291,20 @@ export function createTextureAtlas() {
         return c;
     });
 
-    // ----- SAND ----- (warm beige with wider variation)
+    // ----- SAND ----- (warm golden with natural variation)
     const sandPalette = [
-        [219, 207, 163], [210, 196, 148], [228, 216, 175], [200, 186, 140],
-        [224, 212, 170], [205, 192, 144], [232, 220, 180], [215, 202, 155],
-        [222, 209, 166], [208, 195, 150], [226, 214, 172], [195, 182, 136],
-        [218, 205, 160], [212, 199, 152], [230, 218, 178], [202, 189, 142],
+        [228, 198, 135], [220, 188, 125], [236, 208, 148], [212, 180, 118],
+        [232, 202, 140], [216, 184, 120], [240, 212, 152], [224, 194, 130],
+        [230, 200, 138], [218, 186, 122], [234, 206, 145], [208, 176, 115],
+        [226, 196, 132], [222, 190, 128], [238, 210, 150], [214, 182, 120],
     ];
     fillTile(ctx, FACE_TEXTURES[BlockType.SAND].all, (x, y) => pickColor(sandPalette, x, y, 60));
 
-    // ----- WATER -----
+    // ----- WATER ----- (cleaner blue with visible waves)
     fillTile(ctx, FACE_TEXTURES[BlockType.WATER].all, (x, y) => {
-        const b = COLORS.water.base;
-        const wave = Math.sin(x * 0.8 + y * 0.5) * 15;
-        return [b[0] + wave, b[1] + wave, b[2], 180];
+        const wave1 = Math.sin(x * 0.9 + y * 0.6) * 12;
+        const wave2 = Math.sin(x * 0.4 - y * 0.8) * 8;
+        return [28 + wave1, 90 + wave1 + wave2, 180 + wave2, 160];
     });
 
     // ----- WOOD TOP ----- (concentric ring pattern like real Minecraft)

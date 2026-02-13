@@ -133,23 +133,7 @@ body {
   gap: 4px;
 }
 
-.footer-link {
-  color: rgba(255, 255, 255, 0.55);
-  text-decoration: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  transition: color 0.2s;
-}
 
-.footer-link:hover {
-  color: #fff;
-}
-
-.x-icon {
-  width: 10px;
-  height: 10px;
-}
 
 /* ===== MODE SELECT (Create New World) ===== */
 #mode-select {
@@ -560,6 +544,23 @@ body {
   background: rgba(0, 0, 0, 0.4);
   padding: 6px 10px;
   border-radius: 3px;
+}
+
+#coord-display {
+  position: fixed;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: #fff;
+  font-size: 9px;
+  font-family: 'Press Start 2P', monospace;
+  text-shadow: 1px 1px 0 #000;
+  z-index: 10;
+  pointer-events: none;
+  background: rgba(0, 0, 0, 0.5);
+  padding: 5px 14px;
+  border-radius: 3px;
+  letter-spacing: 1px;
 }
 
 /* Crafting Overlay */

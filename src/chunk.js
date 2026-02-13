@@ -37,40 +37,61 @@ export class Chunk {
         const wx0 = this.cx * CHUNK_SIZE;
         const wz0 = this.cz * CHUNK_SIZE;
 
+        // Store biome per column for decoration pass
+        if (!this.biomeMap) this.biomeMap = new Array(CHUNK_SIZE * CHUNK_SIZE);
+
         for (let lx = 0; lx < CHUNK_SIZE; lx++) {
             for (let lz = 0; lz < CHUNK_SIZE; lz++) {
                 const wx = wx0 + lx;
                 const wz = wz0 + lz;
 
-                // ===== BIOME DETERMINATION (SMOOTHER — lower frequency) =====
-                // Use very low frequency for biome transitions so they're gradual
-                const temp = noise.fbm2D(wx * 0.001 + 1000, wz * 0.001 + 1000, 3, 2.0, 0.5);
-                const moist = noise.fbm2D(wx * 0.001 + 5000, wz * 0.001 + 5000, 3, 2.0, 0.5);
-
-                // Determine biome
-                let biome = 'plains';
-                if (temp > 0.3 && moist < -0.1) biome = 'desert';
-                else if (temp < -0.3) biome = 'snowy';
-                else if (moist > 0.3) biome = 'forest';
-                else if (temp > 0.1 && moist > -0.1) biome = 'savanna';
+                // ===== BIOME DETERMINATION =====
+                const biome = this._getBiome(noise, wx, wz);
+                this.biomeMap[lz * CHUNK_SIZE + lx] = biome;
 
                 // ===== TERRAIN HEIGHT =====
-                // Base continental noise (very smooth, large features)
                 const continentalness = noise.fbm2D(wx * 0.002, wz * 0.002, 4, 2.0, 0.5);
-                // Erosion noise (medium detail)
                 const erosion = noise.fbm2D(wx * 0.008 + 200, wz * 0.008 + 200, 4, 2.0, 0.45);
-                // Detail noise (fine terrain features)
                 const detail = noise.fbm2D(wx * 0.03 + 500, wz * 0.03 + 500, 3, 2.0, 0.4);
 
-                let height = 64 + continentalness * 24 + erosion * 10 + detail * 4;
+                // Ridged noise for mountain peaks
+                const ridgeRaw = noise.fbm2D(wx * 0.005 + 800, wz * 0.005 + 800, 4, 2.0, 0.5);
+                const ridge = 1.0 - Math.abs(ridgeRaw);
+                const ridgeSq = ridge * ridge; // sharper peaks
 
-                // Biome-specific height modifications
-                if (biome === 'desert') {
-                    height = 64 + continentalness * 8 + erosion * 3 + detail * 2;
-                } else if (biome === 'snowy') {
-                    height = 66 + continentalness * 20 + erosion * 12 + detail * 3;
-                } else if (biome === 'forest') {
-                    height = 65 + continentalness * 18 + erosion * 8 + detail * 4;
+                let height;
+                switch (biome) {
+                    case 'desert':
+                        height = 64 + continentalness * 8 + erosion * 3 + detail * 2;
+                        break;
+                    case 'snowy':
+                        height = 66 + continentalness * 20 + erosion * 12 + detail * 3;
+                        break;
+                    case 'forest':
+                    case 'birch_forest':
+                        height = 65 + continentalness * 18 + erosion * 8 + detail * 4;
+                        break;
+                    case 'mountains':
+                        // Dramatic peaks up to y=128+
+                        height = 72 + continentalness * 30 + ridgeSq * 45 + erosion * 8 + detail * 3;
+                        break;
+                    case 'taiga':
+                        height = 66 + continentalness * 22 + erosion * 10 + detail * 3;
+                        break;
+                    case 'swamp':
+                        // Very flat, near sea level
+                        height = 62 + continentalness * 4 + erosion * 2 + detail * 1;
+                        break;
+                    case 'flower_plains':
+                        // Gently rolling hills
+                        height = 65 + continentalness * 12 + erosion * 6 + detail * 3;
+                        break;
+                    case 'savanna':
+                        height = 66 + continentalness * 14 + erosion * 5 + detail * 2;
+                        break;
+                    default: // plains
+                        height = 64 + continentalness * 24 + erosion * 10 + detail * 4;
+                        break;
                 }
 
                 height = Math.floor(Math.max(1, Math.min(CHUNK_HEIGHT - 10, height)));
@@ -97,11 +118,16 @@ export class Chunk {
                             }
                         }
                     } else if (y < height) {
-                        // Surface layers
+                        // Surface layers by biome
                         if (biome === 'desert') {
                             block = BlockType.SAND;
-                        } else if (biome === 'snowy') {
+                        } else if (biome === 'snowy' || biome === 'taiga') {
                             block = y === height - 1 ? BlockType.SNOW : BlockType.DIRT;
+                        } else if (biome === 'mountains' && height > 100) {
+                            // High mountains: stone faces
+                            block = BlockType.STONE;
+                        } else if (biome === 'swamp') {
+                            block = BlockType.DIRT;
                         } else {
                             block = BlockType.DIRT;
                         }
@@ -109,7 +135,13 @@ export class Chunk {
                         // Top block
                         if (biome === 'desert') {
                             block = BlockType.SAND;
-                        } else if (biome === 'snowy') {
+                        } else if (biome === 'mountains' && height > 110) {
+                            // Snow-capped peaks
+                            block = BlockType.SNOW;
+                        } else if (biome === 'mountains' && height > 95) {
+                            // Exposed stone on high slopes
+                            block = BlockType.STONE;
+                        } else if (biome === 'snowy' || biome === 'taiga') {
                             block = BlockType.SNOW;
                         } else {
                             block = BlockType.GRASS;
@@ -137,6 +169,27 @@ export class Chunk {
         this._terrainDone = true;
     }
 
+    // Shared biome determination — same result in generateTerrain and decorate
+    _getBiome(noise, wx, wz) {
+        const temp = noise.fbm2D(wx * 0.001 + 1000, wz * 0.001 + 1000, 3, 2.0, 0.5);
+        const moist = noise.fbm2D(wx * 0.001 + 5000, wz * 0.001 + 5000, 3, 2.0, 0.5);
+        const variant = noise.fbm2D(wx * 0.0015 + 3000, wz * 0.0015 + 3000, 2, 2.0, 0.5);
+
+        if (temp > 0.3 && moist < -0.1) return 'desert';
+        if (temp < -0.35) return 'taiga';
+        if (temp < -0.15 && moist > 0.2) return 'snowy';
+        if (moist > 0.4) return 'swamp';
+        if (moist > 0.2 && temp > -0.1) {
+            return variant > 0.1 ? 'birch_forest' : 'forest';
+        }
+        if (temp > 0.15 && moist < 0.1 && moist > -0.1) return 'savanna';
+        // Mountain regions: high continentalness areas
+        const continent = noise.fbm2D(wx * 0.002, wz * 0.002, 4, 2.0, 0.5);
+        if (continent > 0.35 && temp > -0.2 && temp < 0.25) return 'mountains';
+        if (variant > 0.15 && temp > -0.1 && temp < 0.2) return 'flower_plains';
+        return 'plains';
+    }
+
     // Second pass: trees, flowers, cacti — called after all neighbor chunks have terrain
     decorate(noise) {
         if (this.decorated) return;
@@ -160,29 +213,34 @@ export class Chunk {
 
                 if (height <= SEA_LEVEL) continue;
 
-                // Determine biome (same logic as generateTerrain)
-                const biomeNoise = noise.noise2D(wx * 0.005, wz * 0.005);
-                const tempNoise = noise.noise2D(wx * 0.003 + 500, wz * 0.003 + 500);
-                let biome = 'plains';
-                if (biomeNoise > 0.3) biome = 'forest';
-                else if (biomeNoise < -0.3) biome = 'desert';
-                else if (tempNoise < -0.4) biome = 'snowy';
-                else if (biomeNoise > 0.1) biome = 'savanna';
+                // Use stored biome from generateTerrain (consistent!)
+                const biome = (this.biomeMap && this.biomeMap[lz * CHUNK_SIZE + lx])
+                    ? this.biomeMap[lz * CHUNK_SIZE + lx]
+                    : this._getBiome(noise, wx, wz);
 
                 const decNoise = noise.noise2D(wx * 0.5, wz * 0.5);
-
-                // Trees — only on GRASS or DIRT, never on WOOD/LEAVES/etc.
                 const surfaceBlock = this.blocks[this.getIndex(lx, height, lz)];
-                if (biome !== 'desert' && biome !== 'snowy' && (surfaceBlock === BlockType.GRASS || surfaceBlock === BlockType.DIRT)) {
-                    const treeChance = biome === 'forest' ? 0.88 : 0.94;
+
+                // === TREES ===
+                const canGrowTree = surfaceBlock === BlockType.GRASS || surfaceBlock === BlockType.DIRT;
+                if (canGrowTree && biome !== 'desert' && biome !== 'mountains') {
+                    let treeChance;
+                    switch (biome) {
+                        case 'forest': treeChance = 0.86; break;
+                        case 'birch_forest': treeChance = 0.87; break;
+                        case 'taiga': treeChance = 0.85; break;
+                        case 'swamp': treeChance = 0.92; break;
+                        case 'snowy': treeChance = 0.96; break;
+                        default: treeChance = 0.94; break;
+                    }
                     const spacing = noise.noise2D(wx * 0.3 + 500, wz * 0.3 + 500);
                     if (decNoise > treeChance && spacing > 0.1) {
                         this.generateTree(lx, height + 1, lz);
                     }
                 }
 
-                // Cactus in desert
-                if (biome === 'desert' && decNoise > 0.88) {
+                // === CACTUS — only in desert ===
+                if (biome === 'desert' && surfaceBlock === BlockType.SAND && decNoise > 0.88) {
                     const cactusH = 2 + Math.floor(Math.abs(decNoise) * 3);
                     for (let cy = 1; cy <= cactusH; cy++) {
                         if (height + cy < CHUNK_HEIGHT) {
@@ -191,25 +249,37 @@ export class Chunk {
                     }
                 }
 
-                // Tall grass + occasional flowers — use position-hash for randomness (no line patterns)
-                if ((biome === 'plains' || biome === 'forest' || biome === 'savanna') && surfaceBlock === BlockType.GRASS) {
+                // === FLORA (tall grass, flowers) ===
+                if (surfaceBlock === BlockType.GRASS && height + 1 < CHUNK_HEIGHT) {
                     if (this.blocks[this.getIndex(lx, height + 1, lz)] === BlockType.AIR) {
-                        // Use a hash-based random to avoid coherent noise line patterns
                         const hash = Math.abs(Math.sin(wx * 12.9898 + wz * 78.233) * 43758.5453) % 1;
                         const hash2 = Math.abs(Math.sin(wx * 63.7264 + wz * 10.873) * 28573.2938) % 1;
 
-                        // Tall grass: sparse — ~3% plains, ~5% forest, ~2% savanna
-                        const grassChance = biome === 'forest' ? 0.05 : (biome === 'savanna' ? 0.02 : 0.03);
-                        if (hash < grassChance) {
-                            this.blocks[this.getIndex(lx, height + 1, lz)] = BlockType.TALL_GRASS;
-                        }
-                        // Red flower: ~0.3% chance
-                        else if (hash > 0.996 && hash2 > 0.5) {
-                            this.blocks[this.getIndex(lx, height + 1, lz)] = BlockType.FLOWER_RED;
-                        }
-                        // Yellow flower: ~0.2% chance
-                        else if (hash > 0.994 && hash < 0.996 && hash2 > 0.5) {
-                            this.blocks[this.getIndex(lx, height + 1, lz)] = BlockType.FLOWER_YELLOW;
+                        if (biome === 'flower_plains') {
+                            // Dense flowers and grass
+                            if (hash < 0.12) {
+                                this.blocks[this.getIndex(lx, height + 1, lz)] = BlockType.TALL_GRASS;
+                            } else if (hash > 0.88) {
+                                this.blocks[this.getIndex(lx, height + 1, lz)] = hash2 > 0.5 ? BlockType.FLOWER_RED : BlockType.FLOWER_YELLOW;
+                            }
+                        } else if (biome === 'swamp') {
+                            // Mushrooms in swamp
+                            if (hash < 0.02) {
+                                this.blocks[this.getIndex(lx, height + 1, lz)] = hash2 > 0.5 ? BlockType.MUSHROOM_RED : BlockType.MUSHROOM_BROWN;
+                            } else if (hash < 0.04) {
+                                this.blocks[this.getIndex(lx, height + 1, lz)] = BlockType.TALL_GRASS;
+                            }
+                        } else if (biome !== 'desert' && biome !== 'snowy' && biome !== 'mountains') {
+                            // Normal biome flora
+                            const grassChance = biome === 'forest' || biome === 'birch_forest' ? 0.05
+                                : biome === 'savanna' ? 0.02 : 0.03;
+                            if (hash < grassChance) {
+                                this.blocks[this.getIndex(lx, height + 1, lz)] = BlockType.TALL_GRASS;
+                            } else if (hash > 0.996 && hash2 > 0.5) {
+                                this.blocks[this.getIndex(lx, height + 1, lz)] = BlockType.FLOWER_RED;
+                            } else if (hash > 0.994 && hash < 0.996 && hash2 > 0.5) {
+                                this.blocks[this.getIndex(lx, height + 1, lz)] = BlockType.FLOWER_YELLOW;
+                            }
                         }
                     }
                 }
