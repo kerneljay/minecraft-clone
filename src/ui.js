@@ -394,6 +394,9 @@ export class UI {
 
             debugLines.push(`Velocity: ${velocity.x.toFixed(2)}, ${velocity.y.toFixed(2)}, ${velocity.z.toFixed(2)} | Speed ${speed.toFixed(2)}`);
             debugLines.push(`Ground: ${player.onGround ? 'Yes' : 'No'} | Sprint: ${player.isSprinting ? 'Yes' : 'No'} | Flying: ${player.flying ? 'Yes' : 'No'}`);
+            if (typeof player.flySpeedMultiplier === 'number') {
+                debugLines.push(`Fly Speed Mult: ${player.flySpeedMultiplier.toFixed(2)}x`);
+            }
 
             if (hit) {
                 const blockName = this.getBlockName(hit.block);

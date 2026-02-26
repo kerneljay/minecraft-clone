@@ -762,10 +762,17 @@ function setupGameInput() {
     // Prevent context menu
     document.addEventListener('contextmenu', (e) => e.preventDefault());
 
-    // Scroll wheel — hotbar slot selection
+    // Scroll wheel — fly speed while flying, otherwise hotbar selection
     document.addEventListener('wheel', (e) => {
         if (isPaused) return;
         if (ui.craftingOpen) return;
+
+        if (player?.flying) {
+            const increaseFlySpeed = e.deltaY < 0;
+            player.adjustFlySpeed(increaseFlySpeed);
+            return;
+        }
+
         if (e.deltaY > 0) {
             inventory.selectedSlot = (inventory.selectedSlot + 1) % 9;
         } else {

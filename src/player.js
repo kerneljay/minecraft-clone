@@ -72,6 +72,10 @@ export class Player {
         this.creative = false;
         this.devMode = false;
         this.flying = false;
+        this.flySpeedMultiplier = 1.0;
+        this.flySpeedMin = 0.25;
+        this.flySpeedMax = 5.0;
+        this.flySpeedStep = 0.25;
 
         this.setupControls();
     }
@@ -175,10 +179,11 @@ export class Player {
 
         if (this.flying) {
             // Flying mode (creative)
-            this.velocity.x = moveDir.x * speed * 2;
-            this.velocity.z = moveDir.z * speed * 2;
-            if (this.keys['Space']) this.velocity.y = speed * 2;
-            else if (this.keys['ControlLeft']) this.velocity.y = -speed * 2;
+            const flySpeed = speed * 2 * this.flySpeedMultiplier;
+            this.velocity.x = moveDir.x * flySpeed;
+            this.velocity.z = moveDir.z * flySpeed;
+            if (this.keys['Space']) this.velocity.y = flySpeed;
+            else if (this.keys['ControlLeft']) this.velocity.y = -flySpeed;
             else this.velocity.y *= 0.8; // Slow down vertically
         } else {
             this.velocity.x = moveDir.x * speed;
@@ -191,6 +196,14 @@ export class Player {
                 this.fallStartY = this.position.y;
             }
         }
+    }
+
+    adjustFlySpeed(increase) {
+        const delta = increase ? this.flySpeedStep : -this.flySpeedStep;
+        this.flySpeedMultiplier = Math.max(
+            this.flySpeedMin,
+            Math.min(this.flySpeedMax, this.flySpeedMultiplier + delta)
+        );
     }
 
     updatePhysics(dt) {
