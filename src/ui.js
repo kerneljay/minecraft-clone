@@ -30,6 +30,9 @@ export class UI {
         this.setupCraftingUI();
 
         this.damageFlashAlpha = 0;
+        this.debugFps = 0;
+        this.debugFpsAccum = 0;
+        this.debugFpsFrames = 0;
 
         // Cursor item for inventory drag
         this._cursorItem = null;
@@ -81,7 +84,17 @@ export class UI {
         }
     }
 
-    update(player, inventory, world) {
+    update(player, inventory, world, dt) {
+        if (typeof dt === 'number' && dt > 0) {
+            this.debugFpsAccum += dt;
+            this.debugFpsFrames++;
+            if (this.debugFpsAccum >= 0.5) {
+                this.debugFps = Math.round(this.debugFpsFrames / this.debugFpsAccum);
+                this.debugFpsAccum = 0;
+                this.debugFpsFrames = 0;
+            }
+        }
+
         this.updateHotbar(inventory);
         this.updateHealthBar(player);
         this.updateHungerBar(player);
@@ -300,7 +313,9 @@ export class UI {
         const pos = player.position;
         const chunkX = Math.floor(pos.x / 16);
         const chunkZ = Math.floor(pos.z / 16);
+        const fps = this.debugFps > 0 ? this.debugFps : '--';
         this.debugInfo.innerHTML = [
+            `FPS: ${fps}`,
             `XYZ: ${pos.x.toFixed(1)} / ${pos.y.toFixed(1)} / ${pos.z.toFixed(1)}`,
             `Chunk: ${chunkX}, ${chunkZ}`,
             `Loaded: ${world.chunks.size}`,

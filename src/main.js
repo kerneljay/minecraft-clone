@@ -759,7 +759,7 @@ function animate() {
     lastHealth = player.health;
 
     // Update UI
-    ui.update(player, inventory, world);
+    ui.update(player, inventory, world, dt);
 
     // Underwater detection — check if player's eyes are inside a water block
     const eyeX = Math.floor(player.position.x);
