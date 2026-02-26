@@ -82,6 +82,7 @@ export class Player {
         this.walkCycle = 0;
         this.avatarSwingAmount = 0;
         this.avatarBobOffset = 0;
+        this.avatarJumpOffset = 0;
         this.avatarParts = null;
 
         // Third-person avatar (simple local player model)
@@ -135,34 +136,60 @@ export class Player {
         const skinMat = new THREE.MeshLambertMaterial({ color: 0xd4a574 });
         const shirtMat = new THREE.MeshLambertMaterial({ color: 0x4d79cf });
         const pantsMat = new THREE.MeshLambertMaterial({ color: 0x2f3f73 });
+        const hairMat = new THREE.MeshLambertMaterial({ color: 0x5a3b25 });
 
+        // Use joint pivots (shoulders/hips) to keep limbs from protruding during animation.
+        const headPivot = new THREE.Group();
+        headPivot.position.set(0, 1.34, 0);
         const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), skinMat);
-        head.position.set(0, 1.38, 0);
-        avatar.add(head);
+        head.position.set(0, 0.25, 0);
+        headPivot.add(head);
+        avatar.add(headPivot);
+
+        const hair = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.18, 0.52), hairMat);
+        hair.position.set(0, 0.41, 0);
+        headPivot.add(hair);
 
         const body = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.74, 0.28), shirtMat);
         body.position.set(0, 0.9, 0);
         avatar.add(body);
 
+        const leftArmPivot = new THREE.Group();
+        leftArmPivot.position.set(-0.37, 1.2, 0);
+        avatar.add(leftArmPivot);
         const leftArm = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.7, 0.18), skinMat);
-        leftArm.position.set(-0.38, 0.9, 0);
-        avatar.add(leftArm);
+        leftArm.position.set(0, -0.35, 0);
+        leftArmPivot.add(leftArm);
 
+        const rightArmPivot = new THREE.Group();
+        rightArmPivot.position.set(0.37, 1.2, 0);
+        avatar.add(rightArmPivot);
         const rightArm = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.7, 0.18), skinMat);
-        rightArm.position.set(0.38, 0.9, 0);
-        avatar.add(rightArm);
+        rightArm.position.set(0, -0.35, 0);
+        rightArmPivot.add(rightArm);
 
+        const leftLegPivot = new THREE.Group();
+        leftLegPivot.position.set(-0.14, 0.72, 0);
+        avatar.add(leftLegPivot);
         const leftLeg = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.72, 0.22), pantsMat);
-        leftLeg.position.set(-0.14, 0.36, 0);
-        avatar.add(leftLeg);
+        leftLeg.position.set(0, -0.36, 0);
+        leftLegPivot.add(leftLeg);
 
+        const rightLegPivot = new THREE.Group();
+        rightLegPivot.position.set(0.14, 0.72, 0);
+        avatar.add(rightLegPivot);
         const rightLeg = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.72, 0.22), pantsMat);
-        rightLeg.position.set(0.14, 0.36, 0);
-        avatar.add(rightLeg);
+        rightLeg.position.set(0, -0.36, 0);
+        rightLegPivot.add(rightLeg);
 
         this.avatarParts = {
+            headPivot,
             head,
             body,
+            leftArmPivot,
+            rightArmPivot,
+            leftLegPivot,
+            rightLegPivot,
             leftArm,
             rightArm,
             leftLeg,
@@ -403,7 +430,11 @@ export class Player {
 
         if (this.avatar) {
             this.avatar.visible = !firstPerson;
-            this.avatar.position.set(this.position.x, this.position.y + this.avatarBobOffset, this.position.z);
+            this.avatar.position.set(
+                this.position.x,
+                this.position.y + this.avatarBobOffset + this.avatarJumpOffset,
+                this.position.z
+            );
             this.avatar.rotation.set(0, this.yaw, 0);
         }
 
@@ -431,27 +462,77 @@ export class Player {
             this.velocity.x * this.velocity.x +
             this.velocity.z * this.velocity.z
         );
-        const moving = horizontalSpeed > 0.08 && (this.onGround || this.flying);
-        const stride = Math.min(1, horizontalSpeed / this.sprintSpeed);
+        const speedRatio = Math.min(1, horizontalSpeed / this.sprintSpeed);
+        const moving = speedRatio > 0.02 && (this.onGround || this.flying);
 
         if (moving) {
-            this.walkCycle += dt * (8 + stride * 10);
+            this.walkCycle += dt * (7 + speedRatio * 10);
         }
 
-        const targetSwing = moving ? (0.2 + 0.7 * stride) : 0;
-        const blend = Math.min(1, dt * 12);
-        this.avatarSwingAmount += (targetSwing - this.avatarSwingAmount) * blend;
+        const blendFast = Math.min(1, dt * 14);
+        const blendSlow = Math.min(1, dt * 9);
 
-        const armSwing = Math.sin(this.walkCycle) * this.avatarSwingAmount * 0.85;
-        const legSwing = Math.sin(this.walkCycle) * this.avatarSwingAmount * 1.1;
+        const targetSwing = moving ? (0.16 + speedRatio * 0.6) : 0;
+        this.avatarSwingAmount += (targetSwing - this.avatarSwingAmount) * blendFast;
 
-        this.avatarParts.leftArm.rotation.x = armSwing;
-        this.avatarParts.rightArm.rotation.x = -armSwing;
-        this.avatarParts.leftLeg.rotation.x = -legSwing;
-        this.avatarParts.rightLeg.rotation.x = legSwing;
+        const walkSin = Math.sin(this.walkCycle);
+        let leftArmX = walkSin * this.avatarSwingAmount * 0.8;
+        let rightArmX = -leftArmX;
+        let leftLegX = -walkSin * this.avatarSwingAmount * 1.05;
+        let rightLegX = -leftLegX;
 
-        const targetBob = moving ? Math.abs(Math.sin(this.walkCycle * 2)) * 0.03 * stride : 0;
-        this.avatarBobOffset += (targetBob - this.avatarBobOffset) * blend;
+        // Jump/fall pose
+        let jumpBodyPitch = 0;
+        let jumpYOffset = 0;
+        if (!this.onGround && !this.flying) {
+            if (this.velocity.y > 0.15) {
+                // Jump up: tuck legs a bit, push arms back
+                leftArmX -= 0.28;
+                rightArmX -= 0.28;
+                leftLegX += 0.2;
+                rightLegX += 0.2;
+                jumpBodyPitch = 0.08;
+                jumpYOffset = 0.03;
+            } else {
+                // Falling: brace slightly
+                leftArmX += 0.12;
+                rightArmX += 0.12;
+                leftLegX -= 0.15;
+                rightLegX -= 0.15;
+                jumpBodyPitch = -0.06;
+                jumpYOffset = -0.03;
+            }
+        }
+
+        // Mining/swing animation overlay on right arm
+        if (this.isMining) {
+            rightArmX += -0.85 + Math.sin(this.mineSwingAngle * 1.15) * 0.35;
+        } else if (this.isSwinging) {
+            rightArmX += -0.35 + Math.sin(this.armSwing) * 0.25;
+        }
+
+        // Clamp rotations to keep limbs visually attached and avoid protruding geometry.
+        leftArmX = THREE.MathUtils.clamp(leftArmX, -1.1, 1.1);
+        rightArmX = THREE.MathUtils.clamp(rightArmX, -1.45, 1.1);
+        leftLegX = THREE.MathUtils.clamp(leftLegX, -0.95, 0.95);
+        rightLegX = THREE.MathUtils.clamp(rightLegX, -0.95, 0.95);
+
+        this.avatarParts.leftArmPivot.rotation.x += (leftArmX - this.avatarParts.leftArmPivot.rotation.x) * blendFast;
+        this.avatarParts.rightArmPivot.rotation.x += (rightArmX - this.avatarParts.rightArmPivot.rotation.x) * blendFast;
+        this.avatarParts.leftLegPivot.rotation.x += (leftLegX - this.avatarParts.leftLegPivot.rotation.x) * blendFast;
+        this.avatarParts.rightLegPivot.rotation.x += (rightLegX - this.avatarParts.rightLegPivot.rotation.x) * blendFast;
+
+        // Subtle torso/head counter motion for a more complete animation set.
+        const bodyPitchTarget = THREE.MathUtils.clamp(speedRatio * 0.08 + jumpBodyPitch, -0.15, 0.18);
+        this.avatarParts.body.rotation.x += (bodyPitchTarget - this.avatarParts.body.rotation.x) * blendSlow;
+        const headPitchTarget = -this.avatarParts.body.rotation.x * 0.55;
+        this.avatarParts.headPivot.rotation.x += (headPitchTarget - this.avatarParts.headPivot.rotation.x) * blendSlow;
+
+        const targetBob = (moving && this.onGround)
+            ? Math.abs(Math.sin(this.walkCycle * 2)) * 0.022 * (0.6 + speedRatio)
+            : 0;
+        this.avatarBobOffset += (targetBob - this.avatarBobOffset) * blendSlow;
+        this.avatarJumpOffset += (jumpYOffset - this.avatarJumpOffset) * blendSlow;
     }
 
     updateBlockHighlight() {
