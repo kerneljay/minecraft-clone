@@ -351,6 +351,46 @@ body {
   z-index: 3000;
 }
 
+.pause-title {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 14px;
+  color: #fff;
+  text-align: center;
+  text-shadow: 2px 2px 0 #111;
+  margin-bottom: 8px;
+}
+
+#pause-menu {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 2500;
+  cursor: default;
+}
+
+.pause-content {
+  background: #2b2b2b;
+  border: 3px solid;
+  border-color: #555 #1a1a1a #1a1a1a #555;
+  padding: 20px 26px;
+  width: min(430px, 90vw);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.pause-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 .death-content {
   display: flex;
   flex-direction: column;

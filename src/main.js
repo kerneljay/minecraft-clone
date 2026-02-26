@@ -21,11 +21,13 @@ let renderer, scene, camera;
 let world, player, inventory, dayNight, mobs, ui;
 let clock;
 let isPlaying = false;
+let isPaused = false;
 let gameMode = 'survival';
 let lastHealth = 20;
 let gamePeaceful = false;
 let gameRenderDist = 10;
 let performanceController = null;
+let pauseMenuEl = null;
 
 class PerformanceController {
     constructor(renderer, world) {
@@ -138,12 +140,15 @@ function init() {
 
     // Title screen buttons
     document.getElementById('play-btn').addEventListener('click', () => showModeSelect());
+    document.getElementById('resume-btn')?.addEventListener('click', () => closePauseMenu(true));
+    document.getElementById('leave-world-btn')?.addEventListener('click', leaveWorld);
     document.getElementById('survival-btn')?.addEventListener('click', () => {
         const creativeCb = document.getElementById('creative-cb');
         const mode = (creativeCb && creativeCb.checked) ? 'creative' : 'survival';
         startGame(mode);
     });
     document.getElementById('back-btn')?.addEventListener('click', () => showMainMenu());
+    pauseMenuEl = document.getElementById('pause-menu');
 
     // Settings controls
     const peacefulCb = document.getElementById('peaceful-cb');
@@ -182,7 +187,9 @@ function showMainMenu() {
 
 async function startGame(mode) {
     gameMode = mode;
+    isPaused = false;
     document.getElementById('title-screen').style.display = 'none';
+    if (pauseMenuEl) pauseMenuEl.style.display = 'none';
 
     // Show loading screen
     const loadingScreen = document.getElementById('loading-screen');
@@ -357,7 +364,7 @@ async function startGame(mode) {
 
     // Start pointer lock on click
     renderer.domElement.addEventListener('click', () => {
-        if (!ui.craftingOpen) {
+        if (!ui.craftingOpen && !isPaused) {
             renderer.domElement.requestPointerLock();
         }
     });
@@ -406,6 +413,7 @@ function setupGameInput() {
     // Mouse buttons: left = mine (hold), right = place/interact
     document.addEventListener('mousedown', (e) => {
         if (!player.mouseLocked) return;
+        if (isPaused) return;
         if (ui.craftingOpen) return;
 
         if (e.button === 0) {
@@ -453,6 +461,7 @@ function setupGameInput() {
 
     // Scroll wheel — hotbar slot selection
     document.addEventListener('wheel', (e) => {
+        if (isPaused) return;
         if (ui.craftingOpen) return;
         if (e.deltaY > 0) {
             inventory.selectedSlot = (inventory.selectedSlot + 1) % 9;
@@ -463,6 +472,23 @@ function setupGameInput() {
 
     // Keyboard
     document.addEventListener('keydown', (e) => {
+        if (e.code === 'Escape') {
+            e.preventDefault();
+            if (ui.craftingOpen) {
+                ui.closeCrafting(inventory);
+                return;
+            }
+            if (isDead) return;
+            if (isPaused) {
+                closePauseMenu(true);
+            } else {
+                openPauseMenu();
+            }
+            return;
+        }
+
+        if (isPaused) return;
+
         // Number keys — select hotbar slot
         if (e.code >= 'Digit1' && e.code <= 'Digit9') {
             const slot = parseInt(e.code.replace('Digit', '')) - 1;
@@ -477,13 +503,6 @@ function setupGameInput() {
             } else {
                 exitPointerLock();
                 ui.openCrafting('inventory', inventory);
-            }
-        }
-
-        // Escape — close any open UI
-        if (e.code === 'Escape') {
-            if (ui.craftingOpen) {
-                ui.closeCrafting(inventory);
             }
         }
 
@@ -520,6 +539,28 @@ function setupGameInput() {
             }
         }
     });
+}
+
+function openPauseMenu() {
+    if (!isPlaying || isPaused || !pauseMenuEl) return;
+    isPaused = true;
+    pauseMenuEl.style.display = 'flex';
+    exitPointerLock();
+}
+
+function closePauseMenu(requestPointerLock = false) {
+    if (!pauseMenuEl || !isPaused) return;
+    isPaused = false;
+    pauseMenuEl.style.display = 'none';
+    if (requestPointerLock && renderer && !isDead && !ui?.craftingOpen) {
+        renderer.domElement.requestPointerLock();
+    }
+}
+
+function leaveWorld() {
+    isPlaying = false;
+    isPaused = false;
+    location.reload();
 }
 
 function exitPointerLock() {
@@ -800,6 +841,11 @@ function animate() {
 
     // Update systems
     if (isDead) {
+        renderer.render(scene, camera);
+        return;
+    }
+
+    if (isPaused) {
         renderer.render(scene, camera);
         return;
     }
