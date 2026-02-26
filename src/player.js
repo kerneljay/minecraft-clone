@@ -70,6 +70,7 @@ export class Player {
 
         // Game mode
         this.creative = false;
+        this.devMode = false;
         this.flying = false;
 
         this.setupControls();
@@ -119,8 +120,8 @@ export class Player {
             if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
                 if (!this.flying) this.isSprinting = true;
             }
-            // Creative mode: double-space to toggle fly
-            if (e.code === 'Space' && this.creative) {
+            // Creative/dev mode: double-space to toggle fly
+            if (e.code === 'Space' && (this.creative || this.devMode)) {
                 if (this._lastSpaceTime && Date.now() - this._lastSpaceTime < 300) {
                     this.flying = !this.flying;
                     this.velocity.y = 0;

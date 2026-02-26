@@ -327,8 +327,18 @@ function refreshDebugOverlayVisibility() {
     updateDebugToggleButton();
 }
 
+function applyDeveloperModeToPlayer() {
+    if (!player) return;
+    player.devMode = developerDebugEnabled;
+    if (!developerDebugEnabled && !player.creative && player.flying) {
+        player.flying = false;
+        if (player.velocity) player.velocity.y = 0;
+    }
+}
+
 function toggleDeveloperDebug() {
     developerDebugEnabled = !developerDebugEnabled;
+    applyDeveloperModeToPlayer();
     refreshDebugOverlayVisibility();
 }
 
@@ -578,6 +588,7 @@ async function startGame(mode, options = {}) {
     // Player
     player = new Player(camera, world);
     player.creative = isCreative;
+    player.devMode = developerDebugEnabled;
     player.peaceful = gamePeaceful;
     if (isCreative) {
         player.flying = true;
@@ -680,7 +691,7 @@ function spawnPlayer(savedPlayer = null) {
         if (Number.isFinite(savedPlayer.saturation)) {
             player.saturation = Math.max(0, Math.min(20, savedPlayer.saturation));
         }
-        player.flying = !!savedPlayer.flying;
+        player.flying = !!savedPlayer.flying && (player.creative || player.devMode);
         return;
     }
 
