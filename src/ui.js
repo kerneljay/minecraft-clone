@@ -11,6 +11,7 @@ export class UI {
         this.hungerBar = document.getElementById('hunger-bar');
         this.xpBar = document.getElementById('xp-bar');
         this.debugInfo = document.getElementById('debug-info');
+        this.coordDisplay = document.getElementById('coord-display');
         this.crosshair = document.getElementById('crosshair');
 
         // Crafting overlay
@@ -33,6 +34,15 @@ export class UI {
         this.debugFps = 0;
         this.debugFpsAccum = 0;
         this.debugFpsFrames = 0;
+        this.debugUpdateAccum = 0;
+        this.debugUpdateInterval = 0.2;
+
+        // Lightweight UI caches to avoid expensive full redraws each frame
+        this.lastHotbarState = Array.from({ length: 9 }, () => ({ type: -1, count: -1 }));
+        this.lastSelectedSlot = -1;
+        this.lastHealth = null;
+        this.lastHunger = null;
+        this.lastCoordText = '';
 
         // Cursor item for inventory drag
         this._cursorItem = null;
@@ -88,6 +98,7 @@ export class UI {
         if (typeof dt === 'number' && dt > 0) {
             this.debugFpsAccum += dt;
             this.debugFpsFrames++;
+            this.debugUpdateAccum += dt;
             if (this.debugFpsAccum >= 0.5) {
                 this.debugFps = Math.round(this.debugFpsFrames / this.debugFpsAccum);
                 this.debugFpsAccum = 0;
@@ -96,28 +107,51 @@ export class UI {
         }
 
         this.updateHotbar(inventory);
-        this.updateHealthBar(player);
-        this.updateHungerBar(player);
-        this.updateDebugInfo(player, world);
+        if (player.health !== this.lastHealth) {
+            this.updateHealthBar(player);
+            this.lastHealth = player.health;
+        }
+        if (player.hunger !== this.lastHunger) {
+            this.updateHungerBar(player);
+            this.lastHunger = player.hunger;
+        }
+        if (this.debugUpdateAccum >= this.debugUpdateInterval) {
+            this.updateDebugInfo(player, world);
+            this.debugUpdateAccum = 0;
+        }
         this.updateCoordDisplay(player);
         this.updateDamageFlash();
     }
 
     updateHotbar(inventory) {
+        const selectedSlot = inventory.selectedSlot;
+        if (selectedSlot !== this.lastSelectedSlot) {
+            if (this.lastSelectedSlot >= 0 && this.hotbarSlots[this.lastSelectedSlot]) {
+                this.hotbarSlots[this.lastSelectedSlot].el.classList.remove('selected');
+            }
+            if (this.hotbarSlots[selectedSlot]) {
+                this.hotbarSlots[selectedSlot].el.classList.add('selected');
+            }
+            this.lastSelectedSlot = selectedSlot;
+        }
+
         for (let i = 0; i < 9; i++) {
             const slot = this.hotbarSlots[i];
             const item = inventory.getSlot(i);
+            const type = item ? item.type : 0;
+            const count = item ? item.count : 0;
+            const prev = this.lastHotbarState[i];
 
-            // Selection highlight
-            if (i === inventory.selectedSlot) {
-                slot.el.classList.add('selected');
-            } else {
-                slot.el.classList.remove('selected');
+            if (prev.type === type && prev.count === count) {
+                continue;
             }
 
+            prev.type = type;
+            prev.count = count;
+
             if (item) {
-                this.drawItemIcon(slot.icon, item.type);
-                slot.count.textContent = item.count > 1 ? item.count : '';
+                this.drawItemIcon(slot.icon, type);
+                slot.count.textContent = count > 1 ? count : '';
             } else {
                 const ctx = slot.icon.getContext('2d');
                 ctx.clearRect(0, 0, 32, 32);
@@ -309,7 +343,7 @@ export class UI {
     }
 
     updateDebugInfo(player, world) {
-        if (!this.debugInfo) return;
+        if (!this.debugInfo || this.debugInfo.style.display === 'none') return;
         const pos = player.position;
         const chunkX = Math.floor(pos.x / 16);
         const chunkZ = Math.floor(pos.z / 16);
@@ -324,10 +358,13 @@ export class UI {
     }
 
     updateCoordDisplay(player) {
-        const coordDisplay = document.getElementById('coord-display');
-        if (!coordDisplay || coordDisplay.style.display === 'none') return;
+        if (!this.coordDisplay || this.coordDisplay.style.display === 'none') return;
         const pos = player.position;
-        coordDisplay.innerHTML = `X: ${Math.floor(pos.x)} &nbsp; Y: ${Math.floor(pos.y)} &nbsp; Z: ${Math.floor(pos.z)}`;
+        const coordText = `X: ${Math.floor(pos.x)} &nbsp; Y: ${Math.floor(pos.y)} &nbsp; Z: ${Math.floor(pos.z)}`;
+        if (coordText !== this.lastCoordText) {
+            this.coordDisplay.innerHTML = coordText;
+            this.lastCoordText = coordText;
+        }
     }
 
     updateDamageFlash() {

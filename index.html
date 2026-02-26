@@ -51,6 +51,9 @@
         <button id="play-btn" class="mc-img-btn">
           <img src="/singleplayer.png" alt="Singleplayer" />
         </button>
+         <button id="multiplayer-btn" class="mc-img-btn">
+          <img src="/multiplayer.png" alt="Multiplayer" />
+        </button>
       </div>
       <p class="menu-footer">Minecraft Clone</p>
     </div>
@@ -124,6 +127,17 @@
 
   <!-- Crafting Overlay (dynamically populated by UI) -->
   <div id="crafting-overlay" style="display: none;"></div>
+
+  <!-- Pause Menu -->
+  <div id="pause-menu" style="display: none;">
+    <div class="pause-content">
+      <h2 class="pause-title">Game Menu</h2>
+      <div class="pause-buttons">
+        <button id="resume-btn" class="mc-btn">Back to Game</button>
+        <button id="leave-world-btn" class="mc-btn mc-btn-secondary">Leave World</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Death Screen -->
   <div id="death-screen" style="display: none;">

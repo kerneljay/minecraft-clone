@@ -25,6 +25,80 @@ let gameMode = 'survival';
 let lastHealth = 20;
 let gamePeaceful = false;
 let gameRenderDist = 10;
+let performanceController = null;
+
+class PerformanceController {
+    constructor(renderer, world) {
+        this.renderer = renderer;
+        this.world = world;
+        this.maxPixelRatio = Math.min(window.devicePixelRatio, 2);
+        this.minPixelRatio = 0.75;
+        this.pixelRatio = this.maxPixelRatio;
+        this.smoothedDt = 1 / 60;
+        this.lowFpsSeconds = 0;
+        this.highFpsSeconds = 0;
+        this.adjustCooldown = 0;
+        this.lastWorldProfile = 'normal';
+        this.world.setPerformanceProfile(this.lastWorldProfile);
+    }
+
+    update(dt) {
+        if (!Number.isFinite(dt) || dt <= 0) return;
+
+        this.smoothedDt += (dt - this.smoothedDt) * 0.08;
+        const fps = 1 / this.smoothedDt;
+        this.adjustCooldown = Math.max(0, this.adjustCooldown - dt);
+
+        if (fps < 53) {
+            this.lowFpsSeconds += dt;
+            this.highFpsSeconds = Math.max(0, this.highFpsSeconds - dt);
+        } else if (fps > 59) {
+            this.highFpsSeconds += dt;
+            this.lowFpsSeconds = Math.max(0, this.lowFpsSeconds - dt);
+        } else {
+            this.lowFpsSeconds = Math.max(0, this.lowFpsSeconds - dt * 0.5);
+            this.highFpsSeconds = Math.max(0, this.highFpsSeconds - dt * 0.5);
+        }
+
+        if (this.adjustCooldown <= 0 && this.lowFpsSeconds > 0.5) {
+            this.adjustPixelRatio(-0.1);
+            this.lowFpsSeconds = 0;
+            this.adjustCooldown = 0.6;
+        } else if (this.adjustCooldown <= 0 && this.highFpsSeconds > 2.5) {
+            this.adjustPixelRatio(0.05);
+            this.highFpsSeconds = 0;
+            this.adjustCooldown = 0.8;
+        }
+
+        let worldProfile = 'normal';
+        if (fps < 50) {
+            worldProfile = 'low';
+        } else if (fps > 58 && this.pixelRatio >= this.maxPixelRatio - 0.05) {
+            worldProfile = 'high';
+        }
+        if (worldProfile !== this.lastWorldProfile) {
+            this.world.setPerformanceProfile(worldProfile);
+            this.lastWorldProfile = worldProfile;
+        }
+    }
+
+    adjustPixelRatio(delta) {
+        const nextRatio = Math.min(this.maxPixelRatio, Math.max(this.minPixelRatio, this.pixelRatio + delta));
+        if (Math.abs(nextRatio - this.pixelRatio) < 0.01) return;
+        this.pixelRatio = nextRatio;
+        this.renderer.setPixelRatio(this.pixelRatio);
+        this.renderer.setSize(window.innerWidth, window.innerHeight, false);
+    }
+
+    handleResize() {
+        this.maxPixelRatio = Math.min(window.devicePixelRatio, 2);
+        if (this.pixelRatio > this.maxPixelRatio) {
+            this.pixelRatio = this.maxPixelRatio;
+            this.renderer.setPixelRatio(this.pixelRatio);
+        }
+        this.renderer.setSize(window.innerWidth, window.innerHeight, false);
+    }
+}
 
 // ===== VIDEO BACKGROUND =====
 function initVideoBackground() {
@@ -219,6 +293,7 @@ async function startGame(mode) {
     console.log('World seed:', gameSeed);
     world = new World(scene, blockMaterial, waterMaterial, gameSeed);
     world.renderDistance = gameRenderDist;
+    performanceController = new PerformanceController(renderer, world);
 
     // Player
     player = new Player(camera, world);
@@ -298,7 +373,11 @@ async function startGame(mode) {
     window.addEventListener('resize', () => {
         camera.aspect = window.innerWidth / window.innerHeight;
         camera.updateProjectionMatrix();
-        renderer.setSize(window.innerWidth, window.innerHeight);
+        if (performanceController) {
+            performanceController.handleResize();
+        } else {
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
     });
 
     isPlaying = true;
@@ -710,6 +789,9 @@ function animate() {
     requestAnimationFrame(animate);
 
     const dt = Math.min(clock.getDelta(), 0.1);
+    if (performanceController) {
+        performanceController.update(dt);
+    }
 
     // Update foliage wave time
     if (window._foliageTimeUniform) {
