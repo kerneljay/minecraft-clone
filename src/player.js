@@ -76,6 +76,17 @@ export class Player {
         this.flySpeedMin = 0.25;
         this.flySpeedMax = 5.0;
         this.flySpeedStep = 0.25;
+        this.cameraMode = 0; // 0: first person, 1: third person back, 2: third person front
+        this.thirdPersonDistance = 4.0;
+        this.thirdPersonHeightOffset = 0.35;
+        this.walkCycle = 0;
+        this.avatarSwingAmount = 0;
+        this.avatarBobOffset = 0;
+        this.avatarParts = null;
+
+        // Third-person avatar (simple local player model)
+        this.avatar = this.createAvatar();
+        this.avatar.visible = false;
 
         this.setupControls();
     }
@@ -117,8 +128,94 @@ export class Player {
 
         return armGroup;
     }
+
+    createAvatar() {
+        const avatar = new THREE.Group();
+
+        const skinMat = new THREE.MeshLambertMaterial({ color: 0xd4a574 });
+        const shirtMat = new THREE.MeshLambertMaterial({ color: 0x4d79cf });
+        const pantsMat = new THREE.MeshLambertMaterial({ color: 0x2f3f73 });
+
+        const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), skinMat);
+        head.position.set(0, 1.38, 0);
+        avatar.add(head);
+
+        const body = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.74, 0.28), shirtMat);
+        body.position.set(0, 0.9, 0);
+        avatar.add(body);
+
+        const leftArm = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.7, 0.18), skinMat);
+        leftArm.position.set(-0.38, 0.9, 0);
+        avatar.add(leftArm);
+
+        const rightArm = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.7, 0.18), skinMat);
+        rightArm.position.set(0.38, 0.9, 0);
+        avatar.add(rightArm);
+
+        const leftLeg = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.72, 0.22), pantsMat);
+        leftLeg.position.set(-0.14, 0.36, 0);
+        avatar.add(leftLeg);
+
+        const rightLeg = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.72, 0.22), pantsMat);
+        rightLeg.position.set(0.14, 0.36, 0);
+        avatar.add(rightLeg);
+
+        this.avatarParts = {
+            head,
+            body,
+            leftArm,
+            rightArm,
+            leftLeg,
+            rightLeg,
+        };
+
+        return avatar;
+    }
+
+    cycleCameraMode() {
+        this.cameraMode = (this.cameraMode + 1) % 3;
+    }
+
+    getViewQuaternion() {
+        return new THREE.Quaternion().setFromEuler(
+            new THREE.Euler(this.pitch, this.yaw, 0, 'YXZ')
+        );
+    }
+
+    getViewDirection() {
+        const dir = new THREE.Vector3(0, 0, -1);
+        dir.applyQuaternion(this.getViewQuaternion());
+        return dir.normalize();
+    }
+
+    resolveThirdPersonCamera(origin, target) {
+        const dir = target.clone().sub(origin);
+        const distance = dir.length();
+        if (distance <= 0.001) return origin.clone();
+
+        dir.normalize();
+        const step = 0.12;
+        let safeDistance = distance;
+
+        for (let t = 0.2; t <= distance; t += step) {
+            const px = origin.x + dir.x * t;
+            const py = origin.y + dir.y * t;
+            const pz = origin.z + dir.z * t;
+            const bx = Math.floor(px);
+            const by = Math.floor(py);
+            const bz = Math.floor(pz);
+
+            if (isBlockSolid(this.world.getBlock(bx, by, bz))) {
+                safeDistance = Math.max(0.25, t - 0.2);
+                break;
+            }
+        }
+
+        return origin.clone().addScaledVector(dir, safeDistance);
+    }
     setupControls() {
         document.addEventListener('keydown', (e) => {
+            if (window._chatOpen) return;
             this.keys[e.code] = true;
             // Sprint with Shift
             if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
@@ -163,6 +260,13 @@ export class Player {
     }
 
     updateMovement(dt) {
+        if (window._chatOpen) {
+            this.velocity.x = 0;
+            this.velocity.z = 0;
+            if (this.flying) this.velocity.y *= 0.8;
+            return;
+        }
+
         const forward = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
         const right = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
 
@@ -199,6 +303,7 @@ export class Player {
     }
 
     adjustFlySpeed(increase) {
+        if (!this.devMode) return;
         const delta = increase ? this.flySpeedStep : -this.flySpeedStep;
         this.flySpeedMultiplier = Math.max(
             this.flySpeedMin,
@@ -285,14 +390,68 @@ export class Player {
     }
 
     updateCamera() {
-        this.camera.position.set(
+        const eyePos = new THREE.Vector3(
             this.position.x,
             this.position.y + this.eyeHeight,
             this.position.z
         );
+        const viewQuat = this.getViewQuaternion();
+        const viewDir = new THREE.Vector3(0, 0, -1).applyQuaternion(viewQuat).normalize();
+        const firstPerson = this.cameraMode === 0;
 
-        const euler = new THREE.Euler(this.pitch, this.yaw, 0, 'YXZ');
-        this.camera.quaternion.setFromEuler(euler);
+        this.rightArm.visible = firstPerson;
+
+        if (this.avatar) {
+            this.avatar.visible = !firstPerson;
+            this.avatar.position.set(this.position.x, this.position.y + this.avatarBobOffset, this.position.z);
+            this.avatar.rotation.set(0, this.yaw, 0);
+        }
+
+        if (firstPerson) {
+            this.camera.position.copy(eyePos);
+            this.camera.quaternion.copy(viewQuat);
+            return;
+        }
+
+        const frontView = this.cameraMode === 2;
+        const desiredPos = eyePos
+            .clone()
+            .addScaledVector(viewDir, frontView ? this.thirdPersonDistance : -this.thirdPersonDistance);
+        desiredPos.y += this.thirdPersonHeightOffset;
+
+        const resolvedPos = this.resolveThirdPersonCamera(eyePos, desiredPos);
+        this.camera.position.copy(resolvedPos);
+        this.camera.lookAt(eyePos);
+    }
+
+    updateAvatarAnimation(dt) {
+        if (!this.avatarParts) return;
+
+        const horizontalSpeed = Math.sqrt(
+            this.velocity.x * this.velocity.x +
+            this.velocity.z * this.velocity.z
+        );
+        const moving = horizontalSpeed > 0.08 && (this.onGround || this.flying);
+        const stride = Math.min(1, horizontalSpeed / this.sprintSpeed);
+
+        if (moving) {
+            this.walkCycle += dt * (8 + stride * 10);
+        }
+
+        const targetSwing = moving ? (0.2 + 0.7 * stride) : 0;
+        const blend = Math.min(1, dt * 12);
+        this.avatarSwingAmount += (targetSwing - this.avatarSwingAmount) * blend;
+
+        const armSwing = Math.sin(this.walkCycle) * this.avatarSwingAmount * 0.85;
+        const legSwing = Math.sin(this.walkCycle) * this.avatarSwingAmount * 1.1;
+
+        this.avatarParts.leftArm.rotation.x = armSwing;
+        this.avatarParts.rightArm.rotation.x = -armSwing;
+        this.avatarParts.leftLeg.rotation.x = -legSwing;
+        this.avatarParts.rightLeg.rotation.x = legSwing;
+
+        const targetBob = moving ? Math.abs(Math.sin(this.walkCycle * 2)) * 0.03 * stride : 0;
+        this.avatarBobOffset += (targetBob - this.avatarBobOffset) * blend;
     }
 
     updateBlockHighlight() {
@@ -382,6 +541,8 @@ export class Player {
             this.rightArm.rotation.x = -1.2 - totalSwing * 0.5; // Base angle forward (~70°)
             this.rightArm.rotation.z = -0.1;
         }
+
+        this.updateAvatarAnimation(dt);
     }
 
     swingArm() {
@@ -405,10 +566,12 @@ export class Player {
     }
 
     raycast() {
-        const dir = new THREE.Vector3(0, 0, -1);
-        dir.applyQuaternion(this.camera.quaternion);
-
-        const origin = this.camera.position.clone();
+        const dir = this.getViewDirection();
+        const origin = new THREE.Vector3(
+            this.position.x,
+            this.position.y + this.eyeHeight,
+            this.position.z
+        );
         const step = 0.05;
         let prevX = null, prevY = null, prevZ = null;
 

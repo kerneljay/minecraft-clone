@@ -34,11 +34,18 @@ let currentWorldCreatedAt = null;
 let autosaveTimer = 0;
 let developerDebugEnabled = false;
 let f3DebugEnabled = false;
+let chatRootEl = null;
+let chatMessagesEl = null;
+let chatInputRowEl = null;
+let chatInputEl = null;
+let isChatOpen = false;
 
 const SAVE_INDEX_KEY = 'mineclone:world-index';
 const SAVE_DATA_PREFIX = 'mineclone:world:';
 const SAVE_VERSION = 1;
 const AUTOSAVE_INTERVAL = 5;
+const CHAT_MAX_LINES = 8;
+window._chatOpen = false;
 
 class PerformanceController {
     constructor(renderer, world) {
@@ -342,6 +349,136 @@ function toggleDeveloperDebug() {
     refreshDebugOverlayVisibility();
 }
 
+function setupChatUI() {
+    chatRootEl = document.getElementById('chat-ui');
+    chatMessagesEl = document.getElementById('chat-messages');
+    chatInputRowEl = document.getElementById('chat-input-row');
+    chatInputEl = document.getElementById('chat-input');
+
+    if (!chatRootEl || !chatMessagesEl || !chatInputRowEl || !chatInputEl) return;
+
+    chatInputEl.addEventListener('keydown', (e) => {
+        e.stopPropagation();
+
+        if (e.code === 'F5' || e.code === 'KeyV') {
+            e.preventDefault();
+            if (!isDead && player) {
+                player.cycleCameraMode();
+            }
+            return;
+        }
+
+        if (e.code === 'Enter') {
+            e.preventDefault();
+            const submitted = chatInputEl.value;
+            runChatInput(submitted);
+            closeChat(!isDead);
+            return;
+        }
+
+        if (e.code === 'Escape') {
+            e.preventDefault();
+            closeChat(true);
+        }
+    });
+
+    chatInputEl.addEventListener('click', (e) => {
+        e.stopPropagation();
+    });
+}
+
+function pushChatLine(text, kind = 'player') {
+    if (!chatMessagesEl || !text) return;
+
+    const line = document.createElement('div');
+    line.className = 'chat-line';
+    if (kind === 'system') line.classList.add('system');
+    if (kind === 'error') line.classList.add('error');
+    line.textContent = text;
+    chatMessagesEl.appendChild(line);
+
+    while (chatMessagesEl.children.length > CHAT_MAX_LINES) {
+        chatMessagesEl.removeChild(chatMessagesEl.firstChild);
+    }
+}
+
+function openChat(prefill = '') {
+    if (!isPlaying || isPaused || isDead || ui?.craftingOpen) return;
+    if (!chatRootEl || !chatInputRowEl || !chatInputEl) return;
+
+    isChatOpen = true;
+    window._chatOpen = true;
+    exitPointerLock();
+
+    if (player) {
+        player.keys = {};
+        player.isSprinting = false;
+        if (typeof player.cancelMining === 'function') {
+            player.cancelMining();
+        }
+    }
+
+    chatRootEl.style.display = 'block';
+    chatInputRowEl.style.display = 'flex';
+    chatInputEl.value = prefill;
+    chatInputEl.focus();
+    chatInputEl.setSelectionRange(chatInputEl.value.length, chatInputEl.value.length);
+}
+
+function closeChat(requestPointerLock = false) {
+    if (!isChatOpen) return;
+
+    isChatOpen = false;
+    window._chatOpen = false;
+
+    if (chatInputRowEl) chatInputRowEl.style.display = 'none';
+    if (chatInputEl) {
+        chatInputEl.value = '';
+        chatInputEl.blur();
+    }
+
+    if (requestPointerLock && renderer && isPlaying && !isDead && !isPaused && !ui?.craftingOpen) {
+        renderer.domElement.requestPointerLock();
+    }
+}
+
+function runChatInput(rawText) {
+    const text = String(rawText || '').trim();
+    if (!text) return;
+
+    if (!text.startsWith('/')) {
+        pushChatLine(`You: ${text}`);
+        return;
+    }
+
+    const commandText = text.slice(1).trim();
+    if (!commandText) {
+        pushChatLine('Type /help for available commands.', 'error');
+        return;
+    }
+
+    const [command] = commandText.split(/\s+/);
+    const normalized = command.toLowerCase();
+
+    if (normalized === 'help') {
+        pushChatLine('Commands: /die, /help', 'system');
+        return;
+    }
+
+    if (normalized === 'die') {
+        if (isDead) {
+            pushChatLine('You are already dead.', 'error');
+            return;
+        }
+        pushChatLine('Command executed: /die', 'system');
+        player.health = 0;
+        showDeathScreen();
+        return;
+    }
+
+    pushChatLine(`Unknown command: /${normalized}`, 'error');
+}
+
 // ===== VIDEO BACKGROUND =====
 function initVideoBackground() {
     const vid1 = document.getElementById('bg-vid-1');
@@ -377,6 +514,7 @@ function initVideoBackground() {
 function init() {
     // Video background
     initVideoBackground();
+    setupChatUI();
 
     // Title screen buttons
     document.getElementById('play-btn').addEventListener('click', () => showModeSelect());
@@ -596,6 +734,9 @@ async function startGame(mode, options = {}) {
 
     // Add block highlight to scene
     scene.add(player.highlightBox);
+    if (player.avatar) {
+        scene.add(player.avatar);
+    }
 
     // Add right arm to camera
     camera.add(player.rightArm);
@@ -626,6 +767,16 @@ async function startGame(mode, options = {}) {
     if (loadingScreen) loadingScreen.style.display = 'none';
     document.getElementById('hud').style.display = 'block';
     document.getElementById('crosshair').style.display = 'block';
+    const mineHint = document.getElementById('mine-hint');
+    if (mineHint) mineHint.style.display = 'flex';
+    const placeUseHint = document.getElementById('place-use-hint');
+    if (placeUseHint) placeUseHint.style.display = 'flex';
+    if (chatRootEl) chatRootEl.style.display = 'block';
+    if (chatInputRowEl) chatInputRowEl.style.display = 'none';
+    isChatOpen = false;
+    window._chatOpen = false;
+    if (chatMessagesEl) chatMessagesEl.innerHTML = '';
+    pushChatLine('Type /help for chat commands.', 'system');
 
     // Hide health/hunger in creative
     if (isCreative) {
@@ -649,7 +800,7 @@ async function startGame(mode, options = {}) {
 
     // Start pointer lock on click
     renderer.domElement.addEventListener('click', () => {
-        if (!ui.craftingOpen && !isPaused) {
+        if (!ui.craftingOpen && !isPaused && !isChatOpen) {
             renderer.domElement.requestPointerLock();
         }
     });
@@ -717,6 +868,7 @@ function setupGameInput() {
     document.addEventListener('mousedown', (e) => {
         if (!player.mouseLocked) return;
         if (isPaused) return;
+        if (isChatOpen) return;
         if (ui.craftingOpen) return;
 
         if (e.button === 0) {
@@ -762,12 +914,13 @@ function setupGameInput() {
     // Prevent context menu
     document.addEventListener('contextmenu', (e) => e.preventDefault());
 
-    // Scroll wheel — fly speed while flying, otherwise hotbar selection
+    // Scroll wheel — fly speed while flying in dev mode, otherwise hotbar selection
     document.addEventListener('wheel', (e) => {
         if (isPaused) return;
+        if (isChatOpen) return;
         if (ui.craftingOpen) return;
 
-        if (player?.flying) {
+        if (player?.flying && player?.devMode) {
             const increaseFlySpeed = e.deltaY < 0;
             player.adjustFlySpeed(increaseFlySpeed);
             return;
@@ -782,6 +935,14 @@ function setupGameInput() {
 
     // Keyboard
     document.addEventListener('keydown', (e) => {
+        if (isChatOpen) {
+            if (e.code === 'Escape') {
+                e.preventDefault();
+                closeChat(true);
+            }
+            return;
+        }
+
         if (e.code === 'Escape') {
             e.preventDefault();
             if (ui.craftingOpen) {
@@ -797,7 +958,28 @@ function setupGameInput() {
             return;
         }
 
+        // F5 (or V) — cycle camera perspective
+        if (e.code === 'F5' || e.code === 'KeyV') {
+            e.preventDefault();
+            if (!isDead && player) {
+                player.cycleCameraMode();
+            }
+            return;
+        }
+
         if (isPaused) return;
+
+        if (e.code === 'KeyT') {
+            e.preventDefault();
+            openChat('');
+            return;
+        }
+
+        if (e.code === 'Slash') {
+            e.preventDefault();
+            openChat('/');
+            return;
+        }
 
         // Number keys — select hotbar slot
         if (e.code >= 'Digit1' && e.code <= 'Digit9') {
@@ -851,6 +1033,7 @@ function setupGameInput() {
 
 function openPauseMenu() {
     if (!isPlaying || isPaused || !pauseMenuEl) return;
+    if (isChatOpen) closeChat(false);
     isPaused = true;
     pauseMenuEl.style.display = 'flex';
     exitPointerLock();
@@ -867,6 +1050,7 @@ function closePauseMenu(requestPointerLock = false) {
 
 function leaveWorld() {
     saveCurrentWorldState();
+    if (isChatOpen) closeChat(false);
     isPlaying = false;
     isPaused = false;
     location.reload();
@@ -1015,6 +1199,7 @@ let isDead = false;
 
 function showDeathScreen() {
     isDead = true;
+    if (isChatOpen) closeChat(false);
     saveCurrentWorldState();
     const deathScreen = document.getElementById('death-screen');
     deathScreen.style.display = 'flex';
