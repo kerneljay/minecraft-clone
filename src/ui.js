@@ -43,6 +43,7 @@ export class UI {
         this.lastHealth = null;
         this.lastHunger = null;
         this.lastCoordText = '';
+        this.lastDebugHtml = '';
 
         // Cursor item for inventory drag
         this._cursorItem = null;
@@ -94,7 +95,7 @@ export class UI {
         }
     }
 
-    update(player, inventory, world, dt) {
+    update(player, inventory, world, dt, debugContext = null) {
         if (typeof dt === 'number' && dt > 0) {
             this.debugFpsAccum += dt;
             this.debugFpsFrames++;
@@ -116,7 +117,7 @@ export class UI {
             this.lastHunger = player.hunger;
         }
         if (this.debugUpdateAccum >= this.debugUpdateInterval) {
-            this.updateDebugInfo(player, world);
+            this.updateDebugInfo(player, world, debugContext);
             this.debugUpdateAccum = 0;
         }
         this.updateCoordDisplay(player);
@@ -342,19 +343,84 @@ export class UI {
         }
     }
 
-    updateDebugInfo(player, world) {
+    getBlockName(type) {
+        const data = BlockData[type];
+        return data ? data.name : `Unknown (${type})`;
+    }
+
+    getBlockDebugLine(world, label, x, y, z) {
+        const type = world.getBlock(x, y, z);
+        return `${label} [${x},${y},${z}]: ${this.getBlockName(type)} (${type})`;
+    }
+
+    updateDebugInfo(player, world, debugContext = null) {
         if (!this.debugInfo || this.debugInfo.style.display === 'none') return;
         const pos = player.position;
         const chunkX = Math.floor(pos.x / 16);
         const chunkZ = Math.floor(pos.z / 16);
         const fps = this.debugFps > 0 ? this.debugFps : '--';
-        this.debugInfo.innerHTML = [
+
+        const debugLines = [
             `FPS: ${fps}`,
             `XYZ: ${pos.x.toFixed(1)} / ${pos.y.toFixed(1)} / ${pos.z.toFixed(1)}`,
             `Chunk: ${chunkX}, ${chunkZ}`,
             `Loaded: ${world.chunks.size}`,
             player.creative ? `Mode: Creative${player.flying ? ' (Flying)' : ''}` : `Mode: Survival`,
-        ].join('<br>');
+        ];
+
+        if (debugContext?.developerMode) {
+            const px = Math.floor(pos.x);
+            const py = Math.floor(pos.y);
+            const pz = Math.floor(pos.z);
+            const eyeY = Math.floor(pos.y + (player.eyeHeight ?? 1.52));
+            const hit = typeof player.raycast === 'function' ? player.raycast() : null;
+            const velocity = player.velocity || { x: 0, y: 0, z: 0 };
+            const speed = Math.sqrt(
+                velocity.x * velocity.x +
+                velocity.y * velocity.y +
+                velocity.z * velocity.z
+            );
+
+            debugLines.push('----- Developer -----');
+            if (typeof debugContext.frameMs === 'number') {
+                debugLines.push(`Frame: ${debugContext.frameMs.toFixed(2)}ms`);
+            }
+
+            if (debugContext.renderer) {
+                const r = debugContext.renderer;
+                debugLines.push(`Render: Calls ${r.calls} | Tris ${r.triangles} | Lines ${r.lines} | Points ${r.points}`);
+                debugLines.push(`GPU: Geo ${r.geometries} | Tex ${r.textures} | DPR ${r.pixelRatio.toFixed(2)}`);
+            }
+
+            debugLines.push(`Velocity: ${velocity.x.toFixed(2)}, ${velocity.y.toFixed(2)}, ${velocity.z.toFixed(2)} | Speed ${speed.toFixed(2)}`);
+            debugLines.push(`Ground: ${player.onGround ? 'Yes' : 'No'} | Sprint: ${player.isSprinting ? 'Yes' : 'No'} | Flying: ${player.flying ? 'Yes' : 'No'}`);
+
+            if (hit) {
+                const blockName = this.getBlockName(hit.block);
+                debugLines.push(`Target: ${blockName} (${hit.block}) @ ${hit.blockPos.x},${hit.blockPos.y},${hit.blockPos.z} | Dist ${hit.distance.toFixed(2)}`);
+            } else {
+                debugLines.push('Target: None');
+            }
+
+            debugLines.push(this.getBlockDebugLine(world, 'Feet', px, py, pz));
+            debugLines.push(this.getBlockDebugLine(world, 'Head', px, eyeY, pz));
+            debugLines.push(this.getBlockDebugLine(world, 'Below', px, py - 1, pz));
+            debugLines.push(this.getBlockDebugLine(world, 'North', px, py, pz - 1));
+            debugLines.push(this.getBlockDebugLine(world, 'South', px, py, pz + 1));
+            debugLines.push(this.getBlockDebugLine(world, 'East', px + 1, py, pz));
+            debugLines.push(this.getBlockDebugLine(world, 'West', px - 1, py, pz));
+
+            debugLines.push(`World: Profile ${debugContext.performanceProfile || 'normal'} | Modified ${debugContext.modifiedBlocks ?? 0} | RD ${world.renderDistance}`);
+            if (typeof debugContext.autosaveIn === 'number') {
+                debugLines.push(`Autosave In: ${debugContext.autosaveIn.toFixed(1)}s`);
+            }
+        }
+
+        const debugHtml = debugLines.join('<br>');
+        if (debugHtml !== this.lastDebugHtml) {
+            this.debugInfo.innerHTML = debugHtml;
+            this.lastDebugHtml = debugHtml;
+        }
     }
 
     updateCoordDisplay(player) {

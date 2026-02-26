@@ -64,6 +64,12 @@
         <h2 class="panel-title">Create New World</h2>
 
         <div class="panel-row">
+          <label class="mc-label-block">World Name
+            <input type="text" id="world-name-input" placeholder="Enter world name" class="mc-input-dark" />
+          </label>
+        </div>
+
+        <div class="panel-row">
           <label class="mc-label-block">World Seed
             <input type="text" id="seed-input" placeholder="Leave blank for random" class="mc-input-dark" />
           </label>
@@ -84,6 +90,11 @@
             <input type="checkbox" id="creative-cb" class="mc-checkbox" />
             Creative Mode
           </label>
+        </div>
+
+        <div class="saved-worlds-panel">
+          <div class="saved-worlds-title">Saved Worlds</div>
+          <div id="saved-worlds-list" class="saved-worlds-list"></div>
         </div>
 
         <div class="panel-buttons">
@@ -133,6 +144,7 @@
     <div class="pause-content">
       <h2 class="pause-title">Game Menu</h2>
       <div class="pause-buttons">
+        <button id="debug-toggle-btn" class="mc-btn mc-btn-secondary">Developer Debug: OFF</button>
         <button id="resume-btn" class="mc-btn">Back to Game</button>
         <button id="leave-world-btn" class="mc-btn mc-btn-secondary">Leave World</button>
       </div>

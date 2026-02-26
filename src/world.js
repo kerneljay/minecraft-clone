@@ -6,7 +6,7 @@ import { SimplexNoise } from './noise.js';
 import { BlockType, isBlockSolid } from './blocks.js';
 
 export class World {
-    constructor(scene, material, waterMaterial, seed = 12345) {
+    constructor(scene, material, waterMaterial, seed = 12345, savedState = null) {
         this.scene = scene;
         this.material = material;
         this.waterMaterial = waterMaterial;
@@ -23,6 +23,16 @@ export class World {
             unloadEvery: 4,
         };
         this.updateTick = 0;
+        this.modifiedBlocks = new Map();
+        this.modifiedChunks = new Map();
+
+        if (savedState?.modifiedBlocks) {
+            for (const [key, type] of Object.entries(savedState.modifiedBlocks)) {
+                const coords = this.parseWorldBlockKey(key);
+                if (!coords) continue;
+                this.registerModifiedBlock(coords.x, coords.y, coords.z, type);
+            }
+        }
     }
 
     setPerformanceProfile(profile = 'normal') {
@@ -64,6 +74,72 @@ export class World {
         return this.chunks.get(this.getChunkKey(cx, cz));
     }
 
+    getWorldBlockKey(wx, wy, wz) {
+        return `${wx},${wy},${wz}`;
+    }
+
+    parseWorldBlockKey(key) {
+        const parts = key.split(',').map((v) => parseInt(v, 10));
+        if (parts.length !== 3 || parts.some(Number.isNaN)) return null;
+        return { x: parts[0], y: parts[1], z: parts[2] };
+    }
+
+    getChunkLocalCoords(wx, wz) {
+        return {
+            cx: Math.floor(wx / CHUNK_SIZE),
+            cz: Math.floor(wz / CHUNK_SIZE),
+            lx: ((wx % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE,
+            lz: ((wz % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE,
+        };
+    }
+
+    registerModifiedBlock(wx, wy, wz, type) {
+        const { cx, cz, lx, lz } = this.getChunkLocalCoords(wx, wz);
+        const chunkKey = this.getChunkKey(cx, cz);
+        const localKey = `${lx},${wy},${lz}`;
+        const worldKey = this.getWorldBlockKey(wx, wy, wz);
+        this.modifiedBlocks.set(worldKey, type);
+
+        let chunkMods = this.modifiedChunks.get(chunkKey);
+        if (!chunkMods) {
+            chunkMods = new Map();
+            this.modifiedChunks.set(chunkKey, chunkMods);
+        }
+
+        chunkMods.set(localKey, { lx, ly: wy, lz, type });
+    }
+
+    hasChunkModifications(cx, cz) {
+        const mods = this.modifiedChunks.get(this.getChunkKey(cx, cz));
+        return !!mods && mods.size > 0;
+    }
+
+    applyChunkModifications(chunk) {
+        if (!chunk?.generated) return;
+        const chunkMods = this.modifiedChunks.get(this.getChunkKey(chunk.cx, chunk.cz));
+        if (!chunkMods || chunkMods.size === 0) return;
+
+        let changed = false;
+        for (const mod of chunkMods.values()) {
+            if (mod.ly < 0 || mod.ly >= CHUNK_HEIGHT) continue;
+            const idx = chunk.getIndex(mod.lx, mod.ly, mod.lz);
+            if (chunk.blocks[idx] !== mod.type) {
+                chunk.blocks[idx] = mod.type;
+                changed = true;
+            }
+        }
+
+        if (changed) chunk.dirty = true;
+    }
+
+    getSaveState() {
+        const modifiedBlocks = Object.create(null);
+        for (const [key, type] of this.modifiedBlocks.entries()) {
+            modifiedBlocks[key] = type;
+        }
+        return { modifiedBlocks };
+    }
+
     getBlock(wx, wy, wz) {
         if (wy < 0 || wy >= CHUNK_HEIGHT) return BlockType.AIR;
         const cx = Math.floor(wx / CHUNK_SIZE);
@@ -75,15 +151,18 @@ export class World {
         return chunk.blocks[chunk.getIndex(lx, wy, lz)];
     }
 
-    setBlock(wx, wy, wz, type) {
+    setBlock(wx, wy, wz, type, trackModification = true) {
         if (wy < 0 || wy >= CHUNK_HEIGHT) return;
-        const cx = Math.floor(wx / CHUNK_SIZE);
-        const cz = Math.floor(wz / CHUNK_SIZE);
+        const { cx, cz, lx, lz } = this.getChunkLocalCoords(wx, wz);
         const chunk = this.getChunk(cx, cz);
         if (!chunk) return;
-        const lx = ((wx % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
-        const lz = ((wz % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
-        chunk.blocks[chunk.getIndex(lx, wy, lz)] = type;
+        const idx = chunk.getIndex(lx, wy, lz);
+        if (chunk.blocks[idx] === type) return;
+
+        chunk.blocks[idx] = type;
+        if (trackModification) {
+            this.registerModifiedBlock(wx, wy, wz, type);
+        }
         chunk.dirty = true;
 
         // Mark neighboring chunks dirty if at edge
@@ -131,6 +210,7 @@ export class World {
                 const chunk = new Chunk(cx, cz, this);
                 this.chunks.set(key, chunk);
                 chunk.generate(this.noise);
+                this.applyChunkModifications(chunk);
                 generated++;
             }
         }
@@ -155,6 +235,9 @@ export class World {
         let built = 0;
         const maxBuild = forceAll ? 200 : budget.build;
         for (const [key, chunk] of this.chunks) {
+            if (chunk.generated && this.hasChunkModifications(chunk.cx, chunk.cz)) {
+                this.applyChunkModifications(chunk);
+            }
             if (!chunk.dirty || !chunk.generated) continue;
             chunk.buildMesh(this.material, this.waterMaterial);
             if (chunk.mesh) this.scene.add(chunk.mesh);

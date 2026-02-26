@@ -28,6 +28,17 @@ let gamePeaceful = false;
 let gameRenderDist = 10;
 let performanceController = null;
 let pauseMenuEl = null;
+let currentWorldSaveId = null;
+let currentWorldName = '';
+let currentWorldCreatedAt = null;
+let autosaveTimer = 0;
+let developerDebugEnabled = false;
+let f3DebugEnabled = false;
+
+const SAVE_INDEX_KEY = 'mineclone:world-index';
+const SAVE_DATA_PREFIX = 'mineclone:world:';
+const SAVE_VERSION = 1;
+const AUTOSAVE_INTERVAL = 5;
 
 class PerformanceController {
     constructor(renderer, world) {
@@ -102,6 +113,225 @@ class PerformanceController {
     }
 }
 
+function getSaveStorageKey(id) {
+    return `${SAVE_DATA_PREFIX}${id}`;
+}
+
+function readWorldIndex() {
+    try {
+        const raw = localStorage.getItem(SAVE_INDEX_KEY);
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return [];
+        return parsed
+            .filter((entry) => entry && typeof entry.id === 'string')
+            .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    } catch {
+        return [];
+    }
+}
+
+function writeWorldIndex(index) {
+    localStorage.setItem(SAVE_INDEX_KEY, JSON.stringify(index));
+}
+
+function upsertWorldIndexEntry(record) {
+    const index = readWorldIndex();
+    const entry = {
+        id: record.id,
+        name: record.name,
+        seed: record.seed,
+        mode: record.mode,
+        peaceful: !!record.peaceful,
+        renderDistance: record.renderDistance,
+        createdAt: record.createdAt,
+        updatedAt: record.updatedAt,
+    };
+
+    const existingIdx = index.findIndex((it) => it.id === record.id);
+    if (existingIdx >= 0) {
+        index[existingIdx] = entry;
+    } else {
+        index.push(entry);
+    }
+    index.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    writeWorldIndex(index);
+}
+
+function readWorldSave(id) {
+    if (!id) return null;
+    try {
+        const raw = localStorage.getItem(getSaveStorageKey(id));
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object') return null;
+        if (parsed.id !== id) return null;
+        return parsed;
+    } catch {
+        return null;
+    }
+}
+
+function writeWorldSave(record) {
+    const normalized = {
+        version: SAVE_VERSION,
+        id: record.id,
+        name: record.name || 'New World',
+        seed: Number.isFinite(record.seed) ? record.seed : 12345,
+        mode: record.mode === 'creative' ? 'creative' : 'survival',
+        peaceful: !!record.peaceful,
+        renderDistance: Number.isFinite(record.renderDistance) ? record.renderDistance : 10,
+        createdAt: record.createdAt || Date.now(),
+        updatedAt: record.updatedAt || Date.now(),
+        state: record.state || { modifiedBlocks: {} },
+        player: record.player || null,
+    };
+    localStorage.setItem(getSaveStorageKey(normalized.id), JSON.stringify(normalized));
+    upsertWorldIndexEntry(normalized);
+    return normalized;
+}
+
+function createWorldId() {
+    return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function parseSeedValue(seedValue) {
+    const seedStr = String(seedValue || '').trim();
+    if (!seedStr) {
+        return Math.floor(Math.random() * 2147483647);
+    }
+    if (!isNaN(seedStr)) {
+        return parseInt(seedStr, 10);
+    }
+    let hash = 0;
+    for (let i = 0; i < seedStr.length; i++) {
+        hash = ((hash << 5) - hash) + seedStr.charCodeAt(i);
+        hash |= 0;
+    }
+    return hash;
+}
+
+function getDefaultWorldName() {
+    const worldCount = readWorldIndex().length + 1;
+    return `New World ${worldCount}`;
+}
+
+function formatWorldTimestamp(ts) {
+    if (!ts) return 'Unknown date';
+    try {
+        return new Date(ts).toLocaleString(undefined, {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+        });
+    } catch {
+        return 'Unknown date';
+    }
+}
+
+function renderSavedWorldsList() {
+    const listEl = document.getElementById('saved-worlds-list');
+    if (!listEl) return;
+    listEl.innerHTML = '';
+
+    const saves = readWorldIndex();
+    if (saves.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'saved-world-empty';
+        empty.textContent = 'No saved worlds yet.';
+        listEl.appendChild(empty);
+        return;
+    }
+
+    for (const save of saves) {
+        const item = document.createElement('div');
+        item.className = 'saved-world-item';
+
+        const info = document.createElement('div');
+        info.className = 'saved-world-info';
+
+        const nameEl = document.createElement('div');
+        nameEl.className = 'saved-world-name';
+        nameEl.textContent = save.name || 'Unnamed World';
+
+        const modeLabel = save.mode === 'creative' ? 'Creative' : 'Survival';
+        const lastPlayedEl = document.createElement('div');
+        lastPlayedEl.className = 'saved-world-meta';
+        lastPlayedEl.textContent = `Last Played: ${formatWorldTimestamp(save.updatedAt)}`;
+
+        const detailEl = document.createElement('div');
+        detailEl.className = 'saved-world-submeta';
+        detailEl.textContent = `${modeLabel} • Seed: ${save.seed ?? '-'} • Render Distance: ${save.renderDistance ?? '-'}`;
+
+        const playBtn = document.createElement('button');
+        playBtn.className = 'mc-btn saved-world-play';
+        playBtn.textContent = 'Play';
+        playBtn.addEventListener('click', () => {
+            startGame(save.mode || 'survival', { saveId: save.id });
+        });
+
+        info.appendChild(nameEl);
+        info.appendChild(lastPlayedEl);
+        info.appendChild(detailEl);
+        item.appendChild(info);
+        item.appendChild(playBtn);
+        listEl.appendChild(item);
+    }
+}
+
+function saveCurrentWorldState() {
+    if (!currentWorldSaveId || !world) return;
+
+    const playerState = player ? {
+        x: player.position.x,
+        y: player.position.y,
+        z: player.position.z,
+        health: player.health,
+        hunger: player.hunger,
+        saturation: player.saturation,
+        flying: !!player.flying,
+    } : null;
+
+    writeWorldSave({
+        id: currentWorldSaveId,
+        name: currentWorldName || 'New World',
+        seed: world.seed,
+        mode: gameMode,
+        peaceful: gamePeaceful,
+        renderDistance: world.renderDistance,
+        createdAt: currentWorldCreatedAt || Date.now(),
+        updatedAt: Date.now(),
+        state: world.getSaveState ? world.getSaveState() : { modifiedBlocks: {} },
+        player: playerState,
+    });
+}
+
+function isDebugOverlayVisible() {
+    return developerDebugEnabled || f3DebugEnabled;
+}
+
+function updateDebugToggleButton() {
+    const btn = document.getElementById('debug-toggle-btn');
+    if (!btn) return;
+    btn.textContent = `Developer Debug: ${developerDebugEnabled ? 'ON' : 'OFF'}`;
+    btn.classList.toggle('debug-on', developerDebugEnabled);
+}
+
+function refreshDebugOverlayVisibility() {
+    const debugEl = ui?.debugInfo || document.getElementById('debug-info');
+    if (debugEl) {
+        debugEl.style.display = isDebugOverlayVisible() ? 'block' : 'none';
+    }
+    updateDebugToggleButton();
+}
+
+function toggleDeveloperDebug() {
+    developerDebugEnabled = !developerDebugEnabled;
+    refreshDebugOverlayVisibility();
+}
+
 // ===== VIDEO BACKGROUND =====
 function initVideoBackground() {
     const vid1 = document.getElementById('bg-vid-1');
@@ -140,6 +370,7 @@ function init() {
 
     // Title screen buttons
     document.getElementById('play-btn').addEventListener('click', () => showModeSelect());
+    document.getElementById('debug-toggle-btn')?.addEventListener('click', toggleDeveloperDebug);
     document.getElementById('resume-btn')?.addEventListener('click', () => closePauseMenu(true));
     document.getElementById('leave-world-btn')?.addEventListener('click', leaveWorld);
     document.getElementById('survival-btn')?.addEventListener('click', () => {
@@ -149,6 +380,8 @@ function init() {
     });
     document.getElementById('back-btn')?.addEventListener('click', () => showMainMenu());
     pauseMenuEl = document.getElementById('pause-menu');
+    updateDebugToggleButton();
+    renderSavedWorldsList();
 
     // Settings controls
     const peacefulCb = document.getElementById('peaceful-cb');
@@ -165,6 +398,15 @@ function init() {
     // Try to start with mode select hidden
     const modeSelect = document.getElementById('mode-select');
     if (modeSelect) modeSelect.style.display = 'none';
+
+    const worldNameInput = document.getElementById('world-name-input');
+    if (worldNameInput && !worldNameInput.value.trim()) {
+        worldNameInput.value = getDefaultWorldName();
+    }
+
+    window.addEventListener('beforeunload', () => {
+        saveCurrentWorldState();
+    });
 }
 
 function showModeSelect() {
@@ -173,6 +415,11 @@ function showModeSelect() {
     const modeSelect = document.getElementById('mode-select');
     if (modeSelect) {
         modeSelect.style.display = 'flex';
+        renderSavedWorldsList();
+        const worldNameInput = document.getElementById('world-name-input');
+        if (worldNameInput && !worldNameInput.value.trim()) {
+            worldNameInput.value = getDefaultWorldName();
+        }
     } else {
         startGame('survival');
     }
@@ -185,8 +432,55 @@ function showMainMenu() {
     if (modeSelect) modeSelect.style.display = 'none';
 }
 
-async function startGame(mode) {
-    gameMode = mode;
+async function startGame(mode, options = {}) {
+    const { saveId = null } = options;
+    let saveRecord = null;
+    let gameSeed = 12345;
+
+    if (saveId) {
+        saveRecord = readWorldSave(saveId);
+        if (!saveRecord) {
+            renderSavedWorldsList();
+            return;
+        }
+
+        currentWorldSaveId = saveRecord.id;
+        currentWorldName = saveRecord.name || 'Unnamed World';
+        currentWorldCreatedAt = saveRecord.createdAt || Date.now();
+        gameMode = saveRecord.mode === 'creative' ? 'creative' : 'survival';
+        gamePeaceful = !!saveRecord.peaceful;
+        gameRenderDist = Number.isFinite(saveRecord.renderDistance)
+            ? Math.max(2, Math.min(64, parseInt(saveRecord.renderDistance, 10)))
+            : gameRenderDist;
+        gameSeed = Number.isFinite(saveRecord.seed) ? saveRecord.seed : 12345;
+    } else {
+        gameMode = mode;
+        const worldNameInput = document.getElementById('world-name-input');
+        const worldName = worldNameInput?.value?.trim() || getDefaultWorldName();
+        if (worldNameInput) worldNameInput.value = worldName;
+        currentWorldName = worldName;
+        currentWorldCreatedAt = Date.now();
+
+        const seedInput = document.getElementById('seed-input');
+        gameSeed = parseSeedValue(seedInput ? seedInput.value : '');
+
+        saveRecord = writeWorldSave({
+            id: createWorldId(),
+            name: currentWorldName,
+            seed: gameSeed,
+            mode: gameMode,
+            peaceful: gamePeaceful,
+            renderDistance: gameRenderDist,
+            createdAt: currentWorldCreatedAt,
+            updatedAt: currentWorldCreatedAt,
+            state: { modifiedBlocks: {} },
+            player: null,
+        });
+        currentWorldSaveId = saveRecord.id;
+        renderSavedWorldsList();
+    }
+
+    autosaveTimer = 0;
     isPaused = false;
     document.getElementById('title-screen').style.display = 'none';
     if (pauseMenuEl) pauseMenuEl.style.display = 'none';
@@ -203,7 +497,6 @@ async function startGame(mode) {
     // Setup Three.js
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x87CEEB);
-    const fogDist = gameRenderDist * 16;
     scene.fog = new THREE.FogExp2(0x87CEEB, 0.008);
 
     camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 2400);
@@ -274,31 +567,11 @@ async function startGame(mode) {
     });
 
     // Inventory
-    const isCreative = mode === 'creative';
+    const isCreative = gameMode === 'creative';
     inventory = new Inventory(isCreative);
 
-    // World (with seed)
-    const seedInput = document.getElementById('seed-input');
-    let gameSeed = 12345;
-    if (seedInput && seedInput.value.trim()) {
-        const seedStr = seedInput.value.trim();
-        // If it's a number, use it directly; otherwise hash the string
-        if (!isNaN(seedStr)) {
-            gameSeed = parseInt(seedStr, 10);
-        } else {
-            // Simple string hash
-            gameSeed = 0;
-            for (let i = 0; i < seedStr.length; i++) {
-                gameSeed = ((gameSeed << 5) - gameSeed) + seedStr.charCodeAt(i);
-                gameSeed |= 0; // Convert to 32-bit integer
-            }
-        }
-    } else {
-        // Random seed
-        gameSeed = Math.floor(Math.random() * 2147483647);
-    }
     console.log('World seed:', gameSeed);
-    world = new World(scene, blockMaterial, waterMaterial, gameSeed);
+    world = new World(scene, blockMaterial, waterMaterial, gameSeed, saveRecord?.state || null);
     world.renderDistance = gameRenderDist;
     performanceController = new PerformanceController(renderer, world);
 
@@ -332,6 +605,7 @@ async function startGame(mode) {
 
     // UI
     ui = new UI();
+    refreshDebugOverlayVisibility();
 
     // Clock
     clock = new THREE.Clock();
@@ -357,7 +631,7 @@ async function startGame(mode) {
     world.update(player.position, true);
 
     // Find a safe spawn
-    spawnPlayer();
+    spawnPlayer(saveRecord?.player || null);
 
     // Respawn button handler
     document.getElementById('respawn-btn').addEventListener('click', handleRespawn);
@@ -391,7 +665,25 @@ async function startGame(mode) {
     animate();
 }
 
-function spawnPlayer() {
+function spawnPlayer(savedPlayer = null) {
+    if (savedPlayer &&
+        Number.isFinite(savedPlayer.x) &&
+        Number.isFinite(savedPlayer.y) &&
+        Number.isFinite(savedPlayer.z)) {
+        player.position.set(savedPlayer.x, savedPlayer.y, savedPlayer.z);
+        if (Number.isFinite(savedPlayer.health)) {
+            player.health = Math.max(0, Math.min(20, savedPlayer.health));
+        }
+        if (Number.isFinite(savedPlayer.hunger)) {
+            player.hunger = Math.max(0, Math.min(20, savedPlayer.hunger));
+        }
+        if (Number.isFinite(savedPlayer.saturation)) {
+            player.saturation = Math.max(0, Math.min(20, savedPlayer.saturation));
+        }
+        player.flying = !!savedPlayer.flying;
+        return;
+    }
+
     // Find a solid block under x=8, z=8
     for (let y = CHUNK_SIZE * 7; y > 30; y--) {
         const block = world.getBlock(8, y, 8);
@@ -509,10 +801,8 @@ function setupGameInput() {
         // F3 — toggle debug info
         if (e.code === 'F3') {
             e.preventDefault();
-            const debug = document.getElementById('debug-info');
-            if (debug) {
-                debug.style.display = debug.style.display === 'none' ? 'block' : 'none';
-            }
+            f3DebugEnabled = !f3DebugEnabled;
+            refreshDebugOverlayVisibility();
         }
 
         // Q — toggle coordinate display
@@ -558,6 +848,7 @@ function closePauseMenu(requestPointerLock = false) {
 }
 
 function leaveWorld() {
+    saveCurrentWorldState();
     isPlaying = false;
     isPaused = false;
     location.reload();
@@ -706,6 +997,7 @@ let isDead = false;
 
 function showDeathScreen() {
     isDead = true;
+    saveCurrentWorldState();
     const deathScreen = document.getElementById('death-screen');
     deathScreen.style.display = 'flex';
     document.exitPointerLock();
@@ -887,7 +1179,23 @@ function animate() {
     lastHealth = player.health;
 
     // Update UI
-    ui.update(player, inventory, world, dt);
+    const debugContext = isDebugOverlayVisible() ? {
+        developerMode: developerDebugEnabled,
+        frameMs: dt * 1000,
+        renderer: renderer ? {
+            calls: renderer.info.render.calls,
+            triangles: renderer.info.render.triangles,
+            lines: renderer.info.render.lines,
+            points: renderer.info.render.points,
+            geometries: renderer.info.memory.geometries,
+            textures: renderer.info.memory.textures,
+            pixelRatio: renderer.getPixelRatio(),
+        } : null,
+        performanceProfile: world?.performanceProfile || 'normal',
+        modifiedBlocks: world?.modifiedBlocks ? world.modifiedBlocks.size : 0,
+        autosaveIn: currentWorldSaveId ? Math.max(0, AUTOSAVE_INTERVAL - autosaveTimer) : null,
+    } : null;
+    ui.update(player, inventory, world, dt, debugContext);
 
     // Underwater detection — check if player's eyes are inside a water block
     const eyeX = Math.floor(player.position.x);
@@ -909,6 +1217,14 @@ function animate() {
         } else {
             // DayNight cycle sets fog color; we adjust density for render distance
             scene.fog.density = 1.2 / (world.renderDistance * 16);
+        }
+    }
+
+    if (currentWorldSaveId) {
+        autosaveTimer += dt;
+        if (autosaveTimer >= AUTOSAVE_INTERVAL) {
+            saveCurrentWorldState();
+            autosaveTimer = 0;
         }
     }
 

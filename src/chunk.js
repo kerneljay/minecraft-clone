@@ -311,9 +311,10 @@ export class Chunk {
     }
 
     generateTree(lx, baseY, lz) {
-        const trunkHeight = 4 + Math.floor(Math.random() * 3);
         const wx0 = this.cx * CHUNK_SIZE;
         const wz0 = this.cz * CHUNK_SIZE;
+        const trunkRand = this._hashRand(wx0 + lx, baseY, wz0 + lz);
+        const trunkHeight = 4 + Math.floor(trunkRand * 3);
 
         // Trunk (always within this chunk)
         for (let ty = 0; ty < trunkHeight; ty++) {
@@ -345,7 +346,10 @@ export class Chunk {
                     if (dist > radius * radius + 1) continue;
 
                     // Randomly skip corner blocks for natural look
-                    if (dist === radius * radius + 1 && Math.random() > 0.5) continue;
+                    if (dist === radius * radius + 1) {
+                        const cornerRand = this._hashRand(wx0 + lx + dx, ny, wz0 + lz + dz);
+                        if (cornerRand > 0.5) continue;
+                    }
 
                     const nx = lx + dx;
                     const nz = lz + dz;
@@ -359,12 +363,18 @@ export class Chunk {
                         const worldX = wx0 + nx;
                         const worldZ = wz0 + nz;
                         if (this.world.getBlock(worldX, ny, worldZ) === BlockType.AIR) {
-                            this.world.setBlock(worldX, ny, worldZ, BlockType.LEAVES);
+                            // Decoration write: do not track as player save modification
+                            this.world.setBlock(worldX, ny, worldZ, BlockType.LEAVES, false);
                         }
                     }
                 }
             }
         }
+    }
+
+    _hashRand(x, y, z) {
+        const n = Math.sin(x * 12.9898 + y * 78.233 + z * 37.719) * 43758.5453;
+        return n - Math.floor(n);
     }
 
     buildMesh(material, waterMaterial) {
